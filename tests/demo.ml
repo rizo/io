@@ -15,11 +15,7 @@ let reverse =
     | End    -> Yield (acc, End) in
   Continue (fun i -> step [] i)
 
-let test () =
-  let job = drop 1 >> (map ((+) 1)) in
+let () =
+  let job = drop 1 >> (map ((+) 1)) >> reverse in
   let res = run_exn (enum_list [1; 2; 3; 4; 5] job) in
   List.iter (fun x -> print_endline (string_of_int x)) res
-
-let () =
-  test ()
-

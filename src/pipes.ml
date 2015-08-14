@@ -110,10 +110,5 @@ module Pipe = struct
 
 end
 
-
-open Pipe
-
-
-
-
+include Pipe
 

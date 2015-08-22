@@ -85,6 +85,12 @@ let (>=>) e1 e2 : ('a, 'b) enum =
 
 let (=>) f x = f x
 
+
+module Syntax = struct
+  let (>=>) = (>=>)
+  let (=>)  = (=>)
+end
+
 let rec fmap f = function
   | Yield (x, input) -> Yield (f x, input)
   | Await k -> Await (fun input -> fmap f (k input))
@@ -215,6 +221,19 @@ let rec enum_list xs iter =
   match (iter, xs) with
   | Await k, x::xs' -> enum_list xs' (k (Input.Item x))
   | _-> iter
+
+let enum_channel chan iter =
+  let rec step iter =
+    match iter with
+    | Yield _ | Error _ -> iter
+    | Await k ->
+      try
+        let x = input_line chan in
+        step (k (Input.Item x))
+      with
+        End_of_file -> iter
+  in
+    step iter
 
 let check_done f iter =
   match iter with

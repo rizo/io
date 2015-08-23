@@ -101,7 +101,7 @@ module Pipe = struct
     | Await k -> Await (Fn.map (map f) k)
     | Yield t -> Yield (T2.map (map f) t)
 
-  let return x = Value x
+  let return (lazy x) = Value x
 
   let rec (<*>) f x =
     match f with
@@ -117,11 +117,11 @@ module Pipe = struct
 
   let (>>=) m f = bind m f
 
-  let seq m k = m >>= fun _ -> k
+  let seq ma mb = ma >>= fun _ -> Lazy.force mb
 
   let (>>) = seq
 
-  let rec forever x () = x >> forever x ()
+  let rec forever x = x >> lazy (forever x)
 
   type void = Void
 
@@ -141,16 +141,16 @@ module Pipe = struct
 
   (* val pipe : (a -> b) -> Pipe a b m r *)
   (* let pipe_forever f = forever (await >>= Fn.comp yield f) *)
-  let rec pipe f = await >>= fun x -> yield (f x) >> pipe f
+  let rec pipe f = await >>= fun x -> yield (f x) >> lazy (pipe f)
 
   (* The 'discard' pipe silently discards all input fed to it. *)
-  let rec discard () = await >> discard ()
+  let rec discard () = await >> lazy (discard ())
 
   let id () = pipe Fn.id
 
   let rec fuse p1 p2 =
     match (p1, p2) with
-    | (Yield (x1, p1), p2            ) -> yield x1 >> fuse p1 p2
+    | (Yield (x1, p1), p2            ) -> yield x1 >> lazy (fuse p1 p2)
     | (Value r1      , _             ) -> Value r1
     | (Await f1      , Yield (x2, p2)) -> fuse (f1 x2) p2
     | (p1            , Await f2      ) -> await >>= fun x -> fuse p1 (f2 x)
@@ -173,45 +173,32 @@ module Pipe = struct
 
   (* val print : unit -> ('a, void, unit) t *)
   let rec print () =
-    await >>= fun x -> return (print_endline x) >> print ()
+    await >>= fun x -> return (lazy (print_endline x)) >> lazy (print ())
 
   let rec map f =
     await >>= fun x ->
     yield (f x) >>
-    map f
+    lazy (map f)
 
   let rec from_channel_exn chan =
     let rec loop () =
       try
         let line = input_line chan in
-        yield line >> loop ()
+        yield line >> lazy (loop ())
       with End_of_file ->
         close_in chan;
-        return () in
+        return (lazy ()) in
     loop ()
 
-
-
-  let rec from_channel' chan =
+  let rec from_channel chan =
     match Exn.as_option End_of_file input_line chan with
-    | Some line -> yield line >>= fun _ -> from_channel' chan
-    | None -> close_in chan; return ()
+    | Some line -> yield line >> lazy (from_channel chan)
+    | None -> close_in chan; return (lazy ())
 
   let rec from_channel_fold chan acc f =
     match Exn.as_option End_of_file input_line chan with
     | Some line -> from_channel_fold chan (f acc line) f
     | None -> close_in chan; acc
-
-   (* (f acc line) f *)
-
-   (* k   :: (a -> b -> a) *)
-   (* acc :: a *)
-   (* x   :: b *)
-
-  let rec from_channel_fold' chan =
-    match Exn.as_option End_of_file input_line chan with
-    | Some line -> yield line >> from_channel_fold' chan
-    | None -> close_in chan; return ()
 
   let rec cat file_path acc f =
     let chan = open_in file_path in
@@ -234,6 +221,7 @@ module Pipe = struct
       Await (fun i -> step 0 i)
 
 end
+
 
 open Pipe
 open Pipe.Syntax
@@ -279,13 +267,13 @@ let rec to_list
 
 let rec of_list l : ('a, unit) producer =
   match l with
-  | [] -> return ()
-  | x::xs -> yield x >> of_list xs
+  | [] -> return (lazy ())
+  | x::xs -> yield x >> lazy (of_list xs)
 
 let rec of_channel chan =
   match Exn.as_option End_of_file input_line chan with
-  | Some line -> yield line >> of_channel chan
-  | None -> close_in chan; return ()
+  | Some line -> yield line >> lazy (of_channel chan)
+  | None -> close_in chan; return (lazy ())
 
 (* stdinLn :: Producer String IO () *)
 (*  stdinLn = do *)
@@ -297,8 +285,8 @@ let rec of_channel chan =
 
 let rec get_line () : (string, unit) producer =
   match Exn.as_option End_of_file read_line () with
-  | Some line -> yield line >> get_line ()
-  | None -> return ()
+  | Some line -> yield line >> lazy (get_line ())
+  | None -> return (lazy ())
 
 (* stdoutLn :: Consumer String IO () *)
 (* stdoutLn = do *)
@@ -311,11 +299,9 @@ let rec get_line () : (string, unit) producer =
 (*        -- Otherwise loop *)
 (*        Right () -> stdoutLn *)
 
-let rec put_line
-  : unit -> (string, unit) consumer
-  = fun () ->
-    await >>= fun x -> return (print_endline x) >> put_line ()
-
+let rec put_line ()
+  : (string, unit) consumer
+  = await >>= fun x -> return (lazy (print_endline x)) >> lazy (put_line ())
 
 let rec to_list
   : ('a, unit) producer -> 'a list
@@ -330,14 +316,14 @@ let rec enum_list l p =
   | Await k, x::xs -> enum_list xs (k x)
   | _-> p
 
-let rec get_line p : (string, unit) producer =
+let rec get_line_k' p : (string, unit) producer =
   match p with
   | Await k ->
     begin match Exn.as_option End_of_file read_line () with
-      | Some line -> get_line (k line)
-      | None -> return ()
+      | Some line -> get_line_k' (k line)
+      | None -> return (lazy ())
     end
-  | _ -> return ()
+  | _ -> return (lazy ())
 
 let enum_file file_path i =
   let chan = open_in file_path in
@@ -346,22 +332,22 @@ let enum_file file_path i =
     | Await k ->
       begin match Exn.as_option End_of_file input_line chan with
         | Some line -> enum (k line)
-        | None -> close_in chan; return ()
+        | None -> close_in chan; return (lazy ())
       end
-    | _ -> close_in chan; return () in
+    | _ -> close_in chan; return (lazy ()) in
   enum i
 
 let apply source pipe : ('a, unit) producer =
   match pipe with
   | Await k -> source k
-  | _ -> return ()
+  | _ -> return (lazy ())
 
 let ($) = apply
 
-let rec get_line k : (string, unit) producer =
+let rec get_line_k k : (string, unit) producer =
   begin match Exn.as_option End_of_file read_line () with
-    | Some line -> get_line $ (k line)
-    | None -> return ()
+    | Some line -> get_line_k $ (k line)
+    | None -> return (lazy ())
   end
 
 

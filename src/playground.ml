@@ -7,6 +7,44 @@
 (*sourceList :: Monad m => [b] -> a -> (a -> b -> m a) -> m a*)
 (*source_list [1..10] 0 $ \acc x -> return $ acc + x*)
 
+module Linked_list = struct
+  type 'a t = Nil | Cons of 'a * 'a t
+
+  let rec rev xs =
+    let rec loop acc xs =
+      match xs with
+      | Nil -> acc
+      | Cons (x, xs') -> loop (Cons (x, acc)) xs'
+    in
+      loop Nil xs
+
+  let rec map xs f =
+    match xs with
+    | Nil -> Nil
+    | Cons (x, xs') -> Cons (f x, map xs' f)
+
+  let map_tco xs f =
+    let rec loop acc xs f =
+      match xs with
+      | Nil -> rev acc
+      | Cons (x, xs') -> loop (Cons (f x, acc)) xs' f
+    in
+      loop Nil xs f
+
+  let rec len xs =
+    match xs with
+    | Nil -> 0
+    | Cons (_, xs') -> 1 + len xs'
+
+  let rec len_tco xs =
+    let rec loop n xs =
+      match xs with
+      | Nil -> 0
+      | Cons (_, xs') -> loop (n + 1) xs'
+    in
+      loop 0 xs
+end
+
 module Native = struct
   let rec map f xs =
     match xs with
@@ -137,23 +175,23 @@ end
 
 
 
-value (map_stream : ('elo -> 'eli) -> enumeratee 'elo 'eli 'a) f i =
-  let rec map_stream i =
-    match i with
-    [ IE_cont None k -> ie_cont (step k)
-    | IE_cont (Some _) _ | IE_done _ -> return i
-    ]
-  and step k s =
-    match s with
-    [ Chunk c ->
-        if S.is_empty c
-        then ie_contM (step k)
-        else
-          k (Chunk (S.map f c)) >>% fun (iv, _) ->
-          IO.return (map_stream iv, Sl.empty)
-    | EOF _ ->
-        ie_doneM (ie_cont k) s
-    ]
-  in
-    map_stream i
+(* value (map_stream : ('elo -> 'eli) -> enumeratee 'elo 'eli 'a) f i = *)
+(*   let rec map_stream i =                                             *)
+(*     match i with                                                     *)
+(*     [ IE_cont None k -> ie_cont (step k)                             *)
+(*     | IE_cont (Some _) _ | IE_done _ -> return i                     *)
+(*     ]                                                                *)
+(*   and step k s =                                                     *)
+(*     match s with                                                     *)
+(*     [ Chunk c ->                                                     *)
+(*         if S.is_empty c                                              *)
+(*         then ie_contM (step k)                                       *)
+(*         else                                                         *)
+(*           k (Chunk (S.map f c)) >>% fun (iv, _) ->                   *)
+(*           IO.return (map_stream iv, Sl.empty)                        *)
+(*     | EOF _ ->                                                       *)
+(*         ie_doneM (ie_cont k) s                                       *)
+(*     ]                                                                *)
+(*   in                                                                 *)
+(*     map_stream i                                                     *)
 

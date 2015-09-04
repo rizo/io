@@ -103,33 +103,37 @@ open Base
 
 module Pipe = struct
 
+  (* Pipe state. *)
   type ('i, 'o, 'v) t =
     | Value of 'v
     | Yield of ('o *  ('i, 'o, 'v) t)
     | Await of ('i -> ('i, 'o, 'v) t)
 
+  (* Delayed pipe state. *)
+  type ('i, 'o, 'v) dt = unit -> ('i, 'o, 'v) t
+
   (*
    * Functor Implementation
    *)
 
-  let rec map f p =
-    match p with
-    | Value r -> Value  (f r)
-    | Await k -> Await (Fn.map (map f) k)
-    | Yield t -> Yield (T2.map (map f) t)
+  let rec map f dp =
+    match dp () with
+    | Value v       -> Value  (f v)
+    | Await k       -> Await (fun i -> map f (fun () -> (k i)))
+    | Yield (o, p') -> Yield (o, map f (fun () -> p'))
 
   (*
    * Monad Implementation
    *)
 
   let return x =
-    Value x
+    fun () -> Value x
 
-  let rec bind m f =
-    match m with
-    | Value r       -> f r
-    | Await k       -> Await (fun x -> bind (k x) f)
-    | Yield (o, m') -> Yield (o, bind m' f)
+  let rec bind dm f =
+    match dm () with
+    | Value r       -> fun () -> f r
+    | Await k       -> fun () -> Await (fun x -> bind (fun () -> (k x)) f ())
+    | Yield (o, m') -> fun () -> Yield (o, bind (fun () -> m') f ())
 
   let combine m dm =
     bind m (fun () -> dm ())
@@ -145,13 +149,16 @@ module Pipe = struct
   type void = Void
 
   (* Effectful producer -- like generators, produces values from a source. *)
-  type 'o producer = (void, 'o, unit) t
+  type 'o producer = (void, 'o, unit) dt
 
   (* Effectful consumers -- like iteratees, consume values and return values. *)
-  type ('i, 'v) consumer = ('i,   void, 'v) t
+  type ('i, 'v) consumer = ('i,   void, 'v) dt
 
   (* A complete pipeline, ready to be 'run'. *)
-  type 'v pipeline = (void, void, 'v) t
+  type 'v pipeline = (void, void, 'v) dt
+
+  (* Generic produces with a zero value. *)
+  let zero : 'o producer = return ()
 
   (* Receive input data. *)
   let await = Await (fun i -> Value i)
@@ -159,8 +166,6 @@ module Pipe = struct
   (* Send output data. *)
   let yield o = Yield (o, Value ())
 
-  (* Generic produces with a zero value. *)
-  let zero : 'o producer = return ()
 
   (* Run can only _run_ pipelines that are complete.
      A complete pipeline is the one that awaits no value and yields no values. *)
@@ -193,8 +198,8 @@ module Pipe = struct
    * Pipe Combinators
    *)
 
-  let rec forever m =
-    m >> fun () -> forever m
+  let rec forever dm =
+    dm () >> fun () -> forever dm
 
   (* Create a pipe from a function. *)
   let pipe_forever f =
@@ -255,7 +260,8 @@ module Pipe = struct
   (* FIXME: Return as consumer, i.e., within a value. *)
   let rec to_list
     : 'o producer -> 'a list
-    = function
+    = fun dp ->
+      match dp () with
       | Value ()     -> []
       | Await k      -> fail "impossible output"
       | Yield (o, p') -> o :: to_list p'

@@ -1,0 +1,12 @@
+# OASIS_START
+# DO NOT EDIT (digest: f5ffb16b683148316d12e451599a2ede)
+version = "0.1.0-0"
+description =
+"Simple, secure and composable abstraction for efficient stream processing in a purely functional fashion."
+archive(byte) = "iter.cma"
+archive(byte, plugin) = "iter.cma"
+archive(native) = "iter.cmxa"
+archive(native, plugin) = "iter.cmxs"
+exists_if = "iter.cma"
+# OASIS_STOP
+

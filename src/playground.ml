@@ -7,6 +7,8 @@
 (*sourceList :: Monad m => [b] -> a -> (a -> b -> m a) -> m a*)
 (*source_list [1..10] 0 $ \acc x -> return $ acc + x*)
 
+open Elements
+
 module Linked_list = struct
   type 'a t = Nil | Cons of 'a * 'a t
 
@@ -52,20 +54,33 @@ module Native = struct
     | x::xs' -> f x :: map f xs'
 end
 
-module Foldable = struct
+module Pipe = struct
   type ('a, 'r) source = 'r -> ('r -> 'a -> 'r) -> 'r
 
   type ('a, 'r) sink = ('a, 'r) source -> 'r
 
   type ('a, 'b, 'r) pipe = ('a, 'r) source -> ('b, 'r) source
 
-  let sum await =
-    await 0 (fun acc x -> acc + x)
+  let await z f s =
+    s z f
 
-  let length await =
-    await 0 (fun total x -> total + 1)
+  let sum' await = await 0 (fun acc x -> acc + x)
+  let sum = await 0 (fun acc x -> acc + x)
 
+  let length = await 0 (fun n x -> n + 1)
+
+  let rec source_list ls acc f =
+    match ls with
+    | [] -> acc
+    | x::xs -> source_list xs (f acc x) f
+
+  let rec source_chan ch acc f =
+    match Exn.as_option End_of_file input_line ch with
+    | Some ln -> source_chan ch (f acc ln) f
+    | None -> acc
 end
+
+module P = Pipe
 
 module List = struct
   include List

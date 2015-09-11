@@ -4,39 +4,46 @@ open Elements
 module Pipe = struct
 
   (* Pipe state. *)
-  type ('i, 'o, 'a) t =
+  type ('i, 'o, 'a) pipe =
     | Value of 'a
-    | Yield of ('o *  ('i, 'o, 'a) t)
-    | Await of ('i -> ('i, 'o, 'a) t)
+    | Yield of ('o *  ('i, 'o, 'a) lazy_pipe)
+    | Await of ('i -> ('i, 'o, 'a) lazy_pipe)
+  and
+    ('i, 'o, 'a) lazy_pipe = ('i, 'o, 'a) pipe lazy_t
 
   (*
    * Functor Implementation
    *)
 
   let rec fmap f p =
-    match p with
-    | Value v       -> Value  (f v)
-    | Await k       -> Await (fun i -> fmap f (k i))
-    | Yield (o, p') -> Yield (o, fmap f p')
+    lazy begin match Lazy.force p with
+      | Value v       -> Value  (f v)
+      | Await k       -> Await (fun i -> fmap f (k i))
+      | Yield (o, p') -> Yield (o, fmap f p')
+    end
 
   (*
    * Monad Implementation
    *)
 
   let return
-    : 'a -> ('i, 'o, 'a) t
-    = fun x -> Value x
+    : 'a -> ('i, 'o, 'a) lazy_pipe
+    = fun x -> lazy (Value x)
 
   let rec (>>=)
-    : ('i, 'o, 'a) t -> ('v -> ('i, 'o, 'b) t) -> ('i, 'o, 'b) t
-    = fun m f -> match m with
+     : ('i, 'o, 'a) lazy_pipe
+    -> ('v -> ('i, 'o, 'b) lazy_pipe)
+    -> ('i, 'o, 'b) lazy_pipe
+    = fun m f -> match Lazy.force m with
       | Value r       -> f r
-      | Await k       -> Await (fun x -> k x >>= f)
-      | Yield (o, m') -> Yield (o, m' >>= f)
+      | Await k       -> lazy (Await (fun x -> k x >>= f))
+      | Yield (o, m') -> lazy (Yield (o, m' >>= f))
 
   let (>>)
-    : ('i, 'o, 'a) t -> ('i, 'o, 'b) t Lazy.t -> ('i, 'o, 'b) t
-    = fun ma mb -> ma >>= fun () -> Lazy.force mb
+     : ('i, 'o, 'a) lazy_pipe
+    -> ('i, 'o, 'b) lazy_pipe
+    -> ('i, 'o, 'b) lazy_pipe
+    = fun ma mb -> ma >>= fun _ -> mb
 
   (*
    * Internal Implementation
@@ -46,39 +53,41 @@ module Pipe = struct
   type void = Void
 
   (* Effectful producer -- like generators, produces values from a source. *)
-  type 'o producer = (void, 'o, unit) t
+  type 'o producer = (void, 'o, unit) lazy_pipe
 
   (* Effectful consumers -- like iteratees, consume values and return values. *)
-  type ('i, 'v) consumer = ('i,   void, 'v) t
+  type ('i, 'v) consumer = ('i,   void, 'v) lazy_pipe
 
   (* A complete pipeline, ready to be 'run'. *)
-  type 'v pipeline = (void, void, 'v) t
+  type 'v pipeline = (void, void, 'v) lazy_pipe
 
   (* Generic produces with a zero value. *)
   let zero : 'o producer = return ()
 
   (* Receive input data. *)
-  let await = Await (fun i -> Value i)
+  let await : ('i, 'o, 'a) lazy_pipe =
+    lazy (Await (fun i -> lazy (Value i)))
 
   (* Send output data. *)
-  let yield o = Yield (o, Value ())
+  let yield o : ('i, 'o, 'a) lazy_pipe =
+    lazy (Yield (o, zero))
 
   (* Run can only _run_ pipelines that are complete.
      A complete pipeline is the one that awaits no value and yields no values. *)
   let rec run p =
-    match p with
+    match Lazy.force p with
     | Value r          -> r
     | Await k          -> run (k Void)
     | Yield (Void, p') -> run p'
 
   (* Pipe composition, fuse two pipes into one. *)
   let rec fuse p1 p2 =
-    match (p1, p2) with
-    | (Yield (o1, p1), p2            ) -> yield o1 >> lazy (fuse p1 p2)
-    | (Value v1      , _             ) -> Value v1
-    | (Await f1      , Yield (o2, p2)) -> fuse (f1 o2) p2
-    | (p1            , Await f2      ) -> await >>= fun i -> fuse p1 (f2 i)
-    | (_             , Value v2      ) -> Value v2
+    match Lazy.(force p1, force p2) with
+      | (Yield (o, p), _           ) -> yield o >> fuse p1 p2
+      | (Value x     , _           ) -> lazy (Value x)
+      | (Await f     , Yield (o, p)) -> fuse (f o) p
+      | (_           , Await f     ) -> await >>= fun i -> fuse p1 (f i)
+      | (_           , Value x     ) -> lazy (Value x)
 
   let (<<<) p1 p2 = fuse p1 p2
   let (>>>) p2 p1 = fuse p1 p2
@@ -88,8 +97,8 @@ module Pipe = struct
    *)
 
   let rec forever
-    : ('i, 'o, unit) t -> ('i, 'o, unit) t
-    = fun m -> m >> lazy (forever m)
+    : ('i, 'o, unit) lazy_pipe -> ('i, 'o, unit) lazy_pipe
+    = fun m -> m >> forever m
 
   (* Identity pipe, passes the values. *)
   let id () = forever (await >>= yield)
@@ -100,7 +109,7 @@ module Pipe = struct
 
   (* The 'discard' pipe silently discards all input fed to it. *)
   let rec discard () =
-    await >> lazy (discard ())
+    await >> discard ()
 
   (*
    * Common Producers
@@ -109,23 +118,30 @@ module Pipe = struct
   let rec of_list l =
     match l with
     | [] -> return ()
-    | x::xs -> yield x >> lazy (of_list xs)
+    | x::xs -> yield x >> of_list xs
 
-  let rec of_channel chan =
-    match Exn.as_option End_of_file input_line chan with
-    | Some line -> yield line >> lazy (of_channel chan)
-    | None -> close_in chan; zero
+  let rec of_channel ch =
+    match Exn.as_option End_of_file input_line ch with
+    | Some line -> yield line >> of_channel ch
+    | None -> zero
+
+  let open_file filename =
+    let rec loop ch =
+      match Exn.as_option End_of_file input_line ch with
+      | Some line -> yield line >> loop ch
+      | None -> close_in ch; zero in
+    loop (open_in filename)
 
   let rec get_line () =
     match Exn.as_option End_of_file read_line () with
-    | Some line -> yield line >> lazy (get_line ())
+    | Some line -> yield line >> get_line ()
     | None -> zero
 
   let rec of_channel_exn chan =
     let rec loop () =
       try
         let line = input_line chan in
-        yield line >> lazy (loop ())
+        yield line >> loop ()
       with End_of_file ->
         close_in chan;
         return (lazy ()) in
@@ -148,13 +164,13 @@ module Pipe = struct
     : 'o producer -> ('o, 'a list) consumer
     = fun p ->
       let rec loop acc p =
-        match p with
-        | Value ()     -> return (List.rev acc)
-        | Await k      -> fail "impossible output"
+        match Lazy.force p with
+        | Value ()      -> return (List.rev acc)
+        | Await k       -> fail "impossible output"
         | Yield (o, p') -> loop (o :: acc) p' in
       loop [] p
 
-  let rec put_line =
+  let rec put_line () =
     forever (await >>= fun x -> return (print_endline x))
 
 end

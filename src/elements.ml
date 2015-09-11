@@ -68,6 +68,12 @@ module Opt = struct
 
 end
 
+module type Monad = sig
+  type 'a t
+  val return : 'a -> 'a t
+  val bind : 'a t -> ('a -> 'b t) -> 'b t
+end
+
 module Exn = struct
   let as_option e f x =
     try Some (f x)
@@ -101,5 +107,5 @@ module Base = struct
   let fmt = Printf.sprintf
 end
 
-open Base
+include Base
 

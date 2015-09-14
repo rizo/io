@@ -82,12 +82,27 @@ module Pipe = struct
   let id () = forever (await >>= yield)
 
   (* Create a pipe from a function. *)
-  let map f =
+  let map_forever f =
     forever (await >>= fun i -> yield (f i))
 
+  let rec map f (p : 'o producer) : 'o producer =
+    lazy begin
+      match Lazy.force p with
+      | Yield (o, p') -> Yield (f o, map f p')
+      | p -> p
+    end
+
+  let rec take n p =
+    if n = 0 then zero
+    else lazy begin
+      match Lazy.force p with
+      | Yield (o, p') -> Yield (o, (take (n - 1) p'))
+      | p -> p
+    end
+
   (* The 'discard' pipe silently discards all input fed to it. *)
-  let rec discard =
-    await >> discard
+  let rec discard () =
+    await >> discard ()
 
   (*
    * Common Producers
@@ -130,22 +145,30 @@ module Pipe = struct
     | Some line -> of_channel_cont chan (f acc line) f
     | None -> close_in chan; acc
 
-  let yes () =
+  let yes_forever () =
     forever (yield "yes")
+
+  let rec yes =
+    lazy (Yield ("y", yes))
+
+  let count () : int producer =
+    let rec loop n =
+      lazy (Yield (n, loop (n + 1))) in
+    loop 0
 
   (*
    * Common Consumers
    *)
 
-  let rec to_list p =
+  let rec to_list (p : 'o producer) : 'o list pipeline=
     let rec loop acc p =
       match Lazy.force p with
-      | Value ()      -> return (List.rev acc)
+      | Value ()      -> Value (List.rev acc)
       | Await k       -> fail "impossible output"
       | Yield (o, p') -> loop (o :: acc) p' in
-    loop [] p
+    lazy (loop [] p)
 
-  let rec put_line =
+  let put_line () =
     forever (await >>= fun x -> return (print_endline x))
 
 end

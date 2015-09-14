@@ -21,8 +21,15 @@ let rec (>>|) m f =
 let (>>) m1 m2 =
   m1 >>= fun () -> m2
 
-let rec forever m = m >> forever m
-let map f m = forever (m >>= fun x -> return (f x))
+let rec forever g = g >> forever g
+
+let map_forever f g = forever (g >>= fun x -> return (f x))
+
+let rec map f g =
+  lazy begin match Lazy.force g with
+    | Stop -> Stop
+    | Next (x, g') -> Next (f x, map f g')
+  end
 
 let rec fold f z g =
   match Lazy.force g with

@@ -55,8 +55,8 @@ let rec to_list gen =
   | Stop -> []
   | Next (x, xs) -> x :: to_list xs
 
-let len gen =
-  fold (fun n _ -> n + 1) 0 gen
+let len =
+  fold (fun n _ -> n + 1) 0
 
 let rec take n gen =
   lazy begin

@@ -72,13 +72,12 @@ module Pipe = struct
     | Yield (Void, p') -> run p'
 
   (* Pipe composition, fuse two pipes into one. *)
-  let rec fuse p1 p2 =
-    match (p1, p2) with
-    | (Yield (o1, p1), p2            ) -> yield o1 >> lazy (fuse p1 p2)
-    | (Value v1      , _             ) -> Value v1
-    | (Await f1      , Yield (o2, p2)) -> fuse (f1 o2) p2
-    | (p1            , Await f2      ) -> await >>= fun i -> fuse p1 (f2 i)
-    | (_             , Value v2      ) -> Value v2
+  let rec fuse p1 p2 = match (p1, p2) with
+    | (Yield (o, p), _)             -> yield o >> lazy (fuse p p2)
+    | (Value _      , _)            -> p1
+    | (Await f      , Yield (o, p)) -> fuse (f o) p
+    | (_            , Await f)      -> await >>= fun i -> fuse p1 (f i)
+    | (_            , Value _)      -> p2
 
   let (<<<) p1 p2 = fuse p1 p2
   let (>>>) p2 p1 = fuse p1 p2
@@ -111,10 +110,17 @@ module Pipe = struct
     | [] -> return ()
     | x::xs -> yield x >> lazy (of_list xs)
 
-  let rec of_channel chan =
-    match Exn.as_option End_of_file input_line chan with
-    | Some line -> yield line >> lazy (of_channel chan)
-    | None -> close_in chan; zero
+  let rec of_channel ch =
+    match Exn.as_option End_of_file input_line ch with
+    | Some line -> yield line >> lazy (of_channel ch)
+    | None -> zero
+
+  let open_file filename =
+    let rec loop ch =
+      match Exn.as_option End_of_file input_line ch with
+      | Some line -> yield line >> lazy (loop ch)
+      | None -> close_in ch; zero in
+    loop (open_in filename)
 
   let rec get_line () =
     match Exn.as_option End_of_file read_line () with

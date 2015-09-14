@@ -17,7 +17,7 @@ Description:
 Library "iter"
     Path:           src
     CompiledObject: best
-    Modules:        Iter
+    Modules:        Iter, Elements
     Install:        true
 
 SourceRepository master

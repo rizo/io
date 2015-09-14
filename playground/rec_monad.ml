@@ -1,32 +1,37 @@
 
 module type Gen = sig
-  type 'a t
+  type 'a gen
 
-  val return  : 'a -> 'a t
-  val (>>=)   : 'a t -> ('a -> 'b t) -> 'b t
-  val (>>)    : unit t -> 'a t Lazy.t -> 'a t
+  val return  : 'a -> 'a gen
+  val (>>=)   : 'a gen -> ('a -> 'b gen) -> 'b gen
+  val (>>)    : unit gen -> 'a gen Lazy.t -> 'a gen
 
-  val forever : unit t -> unit
-  val map : ('a -> 'b) -> 'a t -> 'b t
-  val yes : string t
+  val forever : unit gen -> unit
+  val map : ('a -> 'b) -> 'a gen -> 'b gen
+  val yes : string gen
 
-  val input : string t
-  val print : string t -> unit
+  val input : string gen
+  val print : string gen -> unit
 end
 
 module Gen : Gen = struct
-  type 'a t = unit -> 'a
+  type 'a gen = unit -> 'a option
 
-  let return x = fun () -> x
+  let return x = fun () -> Some x
   let (>>=) m f = f (m ())
   let (>>) ma mb = ma >>= fun _ -> Lazy.force mb
 
   let rec forever x = x >> lazy (forever x)
   let map f g = forever (fun () -> f (g ()))
   let yes = return "yes"
-  let input = fun () -> input_line stdin
+  let input = fun () -> Some (input_line stdin)
   let print = map print_endline
+  let of_list l =
+    fun () ->
+      match l with
+      | [] -> None
+      | x::xs -> Some x
 end
 
-module G = Gen
+open Gen
 

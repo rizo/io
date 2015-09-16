@@ -34,17 +34,20 @@ module Pipe = struct
   (* Void type, denotes blocked pipe end. *)
   type void = Void
 
-  (* Effectful producer -- like generators, produces values from a source. *)
-  type 'o producer = (void, 'o, unit) pipe
+  (* Effectful source -- like generators, produces values from a source. *)
+  type 'o source = (void, 'o, unit) pipe
 
-  (* Effectful consumers -- like iteratees, consume values and return values. *)
-  type ('i, 'v) consumer = ('i,   void, 'v) pipe
+  (* Effectful sinks -- like iteratees, consume values and return values. *)
+  type ('i, 'v) sink = ('i,   void, 'v) pipe
+
+  (* A complete pipeline, ready to be 'run'. *)
+  type ('i, 'o) transformer = ('i, 'o, unit) pipe
 
   (* A complete pipeline, ready to be 'run'. *)
   type 'v pipeline = (void, void, 'v) pipe
 
   (* Generic produces with a zero value. *)
-  let zero : 'o producer = return ()
+  let zero : 'o source = return ()
 
   (* Receive input data. *)
   let await = lazy (Await (fun i -> lazy (Value i)))
@@ -63,20 +66,27 @@ module Pipe = struct
   (* Pipe composition, fuse two pipes into one. *)
   let rec fuse p1 p2 =
     match Lazy.(force p1, force p2) with
-    | (Yield (o, p), _)            -> yield o >> fuse p p2
-    | (Value _     , _)            -> p1
-    | (Await f     , Yield (o, p)) -> fuse (f o) p
-    | (_           , Await f)      -> await >>= fun i -> fuse p1 (f i)
-    | (_           , Value _)      -> p2
+    | (Yield (o1, p1'), _              ) -> lazy (Yield (o1, fuse p1' p2))
+    | (Value v1       , _              ) -> p1
+    | (Await f1       , Yield (o2, p2')) -> fuse (f1 o2) p2'
+    | (_              , Await f2       ) -> lazy (Await (fun i -> fuse p1 (f2 i)))
+    | (_              , Value v2       ) -> p2
 
-  let (<<<) p1 p2 = fuse p1 p2
-  let (>>>) p2 p1 = fuse p1 p2
+  and (>->) p2 p1 = fuse p1 p2
+  and (<-<) p1 p2 = fuse p1 p2
 
   (*
    * Pipe Combinators
    *)
 
   let rec forever p = p >> forever p
+  let rec forever' p =
+    lazy begin
+      match Lazy.force p with
+      | Value x       -> print"val";Value x
+      | Yield (o, p') -> print"yld";Yield (o, forever' p')
+      | Await k       -> print"awt";Await (fun x -> forever' (k x))
+    end
 
   (* Identity pipe, passes the values. *)
   let id () = forever (await >>= yield)
@@ -85,11 +95,33 @@ module Pipe = struct
   let map_forever f =
     forever (await >>= fun i -> yield (f i))
 
-  let rec map f (p : 'o producer) : 'o producer =
+  let rec map_test f =
+    await >>= fun i -> lazy (Yield (f i, map_test f))
+
+  let rec map f : ('i, 'o) transformer =
+    lazy (Await (fun i -> lazy (Yield (f i, map f))))
+
+  let rec map_forever' f =
+    forever' (await >>= fun i -> yield (f i))
+
+  let rec map_match f (p : 'o source) : 'o source =
     lazy begin
       match Lazy.force p with
-      | Yield (o, p') -> Yield (f o, map f p')
+      | Yield (o, p') -> Yield (f o, map_match f p')
       | p -> p
+    end
+
+  let rec take' n =
+    print (fmt "take' n: %d" n);
+    if n = 0 then lazy (Value ())
+    else await >>= fun i ->
+      lazy (Yield (i, take' (n - 1)))
+
+  let rec take'' n =
+    print (fmt "take'' n: %d" n);
+    lazy begin
+      if n = 0 then Value ()
+      else Await (fun i -> lazy (Yield (i, take'' (n - 1))))
     end
 
   let rec take n p =
@@ -101,11 +133,11 @@ module Pipe = struct
     end
 
   (* The 'discard' pipe silently discards all input fed to it. *)
-  let rec discard () =
-    await >> discard ()
+  let rec discard =
+    lazy (Await (fun _ -> discard))
 
   (*
-   * Common Producers
+   * Common sources
    *)
 
   let rec of_list l =
@@ -148,19 +180,25 @@ module Pipe = struct
   let yes_forever () =
     forever (yield "yes")
 
-  let rec yes =
+  let rec yes : string source =
     lazy (Yield ("y", yes))
 
-  let count () : int producer =
+  let count : int source =
     let rec loop n =
       lazy (Yield (n, loop (n + 1))) in
     loop 0
 
+  let iota n : int source =
+    let rec loop i =
+      lazy (if i = n then Value ()
+            else Yield (i, loop (i + 1))) in
+    loop 0
+
   (*
-   * Common Consumers
+   * Common sinks
    *)
 
-  let rec to_list (p : 'o producer) : 'o list pipeline=
+  let rec to_list (p : 'o source) : 'o list pipeline=
     let rec loop acc p =
       match Lazy.force p with
       | Value ()      -> Value (List.rev acc)
@@ -169,9 +207,15 @@ module Pipe = struct
     lazy (loop [] p)
 
   let put_line () =
-    forever (await >>= fun x -> return (print_endline x))
+    forever' (await >>= fun x -> return (print_endline x))
+
+  let rec put_line' =
+    lazy (Await (fun i -> print i; put_line'))
+
+  let rec put_line' =
+    lazy (Await (fun i -> print i; put_line'))
 
 end
 
-module P = Pipe
+open Pipe
 

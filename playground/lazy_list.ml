@@ -46,3 +46,10 @@ let rec of_chan ch =
     | None -> Nil
   end
 
+let rec yes =
+  lazy (Cons ("y", yes))
+
+let count () =
+  let rec loop n =
+    lazy (Cons (n, loop (n + 1))) in
+  loop 0

@@ -5,7 +5,7 @@ module Pipe = struct
 
   (* Current state of the computation. *)
   type ('i, 'o, 'a) step =
-    | Value of 'a
+    | Ready of 'a
     | Yield of ('o *  ('i, 'o, 'a) pipe)
     | Await of ('i -> ('i, 'o, 'a) pipe)
 
@@ -16,11 +16,11 @@ module Pipe = struct
    * Monad Implementation
    *)
 
-  let return x = lazy (Value x)
+  let return x = lazy (Ready x)
 
   let rec (>>=) p f =
     match Lazy.force p with
-    | Value r       -> f r
+    | Ready r       -> f r
     | Yield (o, p') -> lazy (Yield (o, p' >>= f))
     | Await k       -> lazy (Await (fun x -> k x >>= f))
 
@@ -47,30 +47,30 @@ module Pipe = struct
   type 'v pipeline = (void, void, 'v) pipe
 
   (* Generic produces with a zero value. *)
-  let zero : 'o source = return ()
+  let zero () = return ()
 
   (* Receive input data. *)
-  let await = lazy (Await (fun i -> lazy (Value i)))
+  let await = lazy (Await (fun i -> lazy (Ready i)))
 
   (* Send output data. *)
-  let yield o = lazy (Yield (o, lazy (Value ())))
+  let yield o = lazy (Yield (o, lazy (Ready ())))
 
   (* Run can only _run_ pipelines that are complete.
      A complete pipeline is the one that awaits no value and yields no values. *)
   let rec run p =
     match Lazy.force p with
-    | Value r          -> r
+    | Ready r          -> r
     | Await k          -> run (k Void)
     | Yield (Void, p') -> run p'
 
   (* Pipe composition, fuse two pipes into one. *)
-  let rec fuse p1 p2 =
-    match Lazy.(force p1, force p2) with
-    | (Yield (o1, p1'), _              ) -> lazy (Yield (o1, fuse p1' p2))
-    | (Value v1       , _              ) -> p1
-    | (Await f1       , Yield (o2, p2')) -> fuse (f1 o2) p2'
-    | (_              , Await f2       ) -> lazy (Await (fun i -> fuse p1 (f2 i)))
-    | (_              , Value v2       ) -> p2
+  let rec fuse p1' p2' =
+    match Lazy.(force p1', force p2') with
+    | Yield (x1, p1), p2             -> yield x1 >> fuse p1 p2'
+    | Ready r1      , _              -> lazy (Ready r1)
+    | Await f1      , Yield (x2, p2) -> fuse (f1 x2) p2
+    | _             , Await f2       -> await >>= fun x -> fuse p1' (f2 x)
+    | _             , Ready r2       -> lazy (Ready r2)
 
   and (>->) p2 p1 = fuse p1 p2
   and (<-<) p1 p2 = fuse p1 p2
@@ -83,7 +83,7 @@ module Pipe = struct
   let rec forever' p =
     lazy begin
       match Lazy.force p with
-      | Value x       -> print"val";Value x
+      | Ready x       -> print"val";Ready x
       | Yield (o, p') -> print"yld";Yield (o, forever' p')
       | Await k       -> print"awt";Await (fun x -> forever' (k x))
     end
@@ -111,26 +111,9 @@ module Pipe = struct
       | p -> p
     end
 
-  let rec take' n =
-    print (fmt "take' n: %d" n);
-    if n = 0 then lazy (Value ())
-    else await >>= fun i ->
-      lazy (Yield (i, take' (n - 1)))
-
-  let rec take'' n =
-    print (fmt "take'' n: %d" n);
-    lazy begin
-      if n = 0 then Value ()
-      else Await (fun i -> lazy (Yield (i, take'' (n - 1))))
-    end
-
-  let rec take n p =
-    if n = 0 then zero
-    else lazy begin
-      match Lazy.force p with
-      | Yield (o, p') -> Yield (o, (take (n - 1) p'))
-      | p -> p
-    end
+  let rec take n : ('i, 'o) transformer =
+    if n = 0 then zero ()
+    else await >>= fun i -> yield i >> take (n - 1)
 
   (* The 'discard' pipe silently discards all input fed to it. *)
   let rec discard =
@@ -148,19 +131,19 @@ module Pipe = struct
   let rec of_channel ch =
     match Exn.as_option End_of_file input_line ch with
     | Some line -> yield line >> of_channel ch
-    | None -> zero
+    | None -> zero ()
 
   let open_file filename =
     let rec loop ch =
       match Exn.as_option End_of_file input_line ch with
       | Some line -> yield line >> loop ch
-      | None -> close_in ch; zero in
+      | None -> close_in ch; zero () in
     loop (open_in filename)
 
   let rec get_line () =
     match Exn.as_option End_of_file read_line () with
     | Some line -> yield line >> get_line ()
-    | None -> zero
+    | None -> zero ()
 
   let rec of_channel_exn chan =
     let rec loop () =
@@ -190,7 +173,7 @@ module Pipe = struct
 
   let iota n : int source =
     let rec loop i =
-      lazy (if i = n then Value ()
+      lazy (if i = n then Ready ()
             else Yield (i, loop (i + 1))) in
     loop 0
 
@@ -201,7 +184,7 @@ module Pipe = struct
   let rec to_list (p : 'o source) : 'o list pipeline=
     let rec loop acc p =
       match Lazy.force p with
-      | Value ()      -> Value (List.rev acc)
+      | Ready ()      -> Ready (List.rev acc)
       | Await k       -> fail "impossible output"
       | Yield (o, p') -> loop (o :: acc) p' in
     lazy (loop [] p)
@@ -214,8 +197,9 @@ module Pipe = struct
 
   let rec put_line' =
     lazy (Await (fun i -> print i; put_line'))
-
 end
 
 open Pipe
+
+(* yes >> yes >-> take 5 >-> map String.uppercase |> to_list |> run; *)
 

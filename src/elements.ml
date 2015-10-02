@@ -9,6 +9,7 @@ module Fn = struct
   let apply f x = f x
   let map f x = compose f x
   let id x = x
+  let flip f x y = f y x
   let (@@) = apply
   let (@.) = compose
 end
@@ -95,6 +96,8 @@ module Coroutine = struct
 end
 
 module Base = struct
+  type void = Void
+
   let time f x =
     let t = Unix.gettimeofday () in
     let fx = f x in
@@ -105,6 +108,8 @@ module Base = struct
   let fail = Exn.fail
   let print = print_endline
   let fmt = Printf.sprintf
+
+  let flip = Fn.flip
 end
 
 include Base

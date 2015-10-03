@@ -2,81 +2,106 @@
 
 open Elements
 
-type ('i, 'o, 'a) task = unit -> ('i, 'o, 'a) task_status
-and ('i, 'o, 'a) task_status =
-  | Ready of 'a
-  | Yield of ('o *  ('i, 'o, 'a) task)
-  | Await of ('i -> ('i, 'o, 'a) task)
+type ('a, 'b, 'r) task = unit -> ('a, 'b, 'r) task_status
+ and ('a, 'b, 'r) task_status =
+   | Ready of 'r
+   | Yield of ('b *  ('a, 'b, 'r) task)
+   | Await of ('a -> ('a, 'b, 'r) task)
 
-(* type ('o, 'a) producer = (unit, 'o  , 'a) task *)
-(* type ('i, 'a) consumer = ('i  , unit, 'a) task *)
-(* type      'a  workflow = (unit, unit, 'a) task *)
+type ('o, 'a) producer = (unit, 'o  , 'a) task
+type ('i, 'a) consumer = ('i  , unit, 'a) task
+type      'a  workflow = (unit, unit, 'a) task
 
-let zero = fun () -> Ready ()
+let zero =
+  fun () -> Ready ()
 
-let _return x = fun () -> Ready x
+let return x =
+  fun () -> Yield (x, zero)
 
 let rec (>>=) t f =
   match t () with
-  | Ready x       -> f x
+  | Ready a       -> f a
   | Yield (o, t') -> fun () -> Yield (o, t' >>= f)
   | Await k       -> fun () -> Await (fun i -> k i >>= f)
 
-let (>>) a1 a2 =
-  a1 >>= fun () -> a2
+let (>>) t1 t2 =
+  t1 >>= fun () -> t2
 
-let _yield x = fun () -> Yield (x, zero)
+let yield b =
+  fun () -> Yield (b, zero)
 
-let _await = fun () -> Await (fun i () -> Ready i)
+let await =
+  fun () -> Await (fun i () -> Yield (i, zero))
+
+let rec (<-<) t1 t2 =
+  match t1 (), t2 () with
+  | Ready a        , _              -> fun () -> Ready a
+  | Yield (b, t1') , t2'            -> fun () -> Yield (b, t1' <-< t2)
+  | Await f        , Yield (b, t2') -> f b <-< t2'
+  | t1'            , Await f        -> fun () -> Await (fun a -> t1 <-< f a)
+  | _              , Ready a        -> fun () -> Ready a
+
+let rec cat =
+  fun () ->
+    Await (fun a -> fun () -> Yield (a, cat))
 
 let rec run t =
   match t () with
   | Ready r       -> r
+  | Yield (Void, b) -> run b
   | Await k       -> run (k ())
-  | Yield ((), b) -> run b
 
-let rec compose_strict t1 t2 =
-  match t1 (), t2 () with
-  | Yield (x1, t1'), t2'             -> fun () -> Yield (x1, (t1' <-< t2))
-  | Ready r1       , _               -> fun () -> Ready r1
-  | Await k1       , Yield (x2, t2') -> k1 x2 <-< t2'
-  | t1'            , Await k2        -> fun () -> Await (fun x -> t1 <-< k2 x)
-  | _              , Ready r2        -> fun () -> Ready r2
+let rec repeat a =
+  fun () -> Yield (a, repeat a)
 
-and (<-<) t1 t2 = compose_strict t1 t2
-and (>->) t1 t2 = compose_strict t2 t1
-
-(* Monad composition *)
-let rec forever a = a >> forever a
+let rec repeatedly f =
+  fun () -> Yield (f (), repeatedly f)
 
 let rec discard =
   fun () -> Await (fun i -> discard)
 
-let rec yes =
-  fun () -> Yield ("y", yes)
+let rec yes = repeat "y"
+let rec  no = repeat "n"
 
-let rec no =
-  fun () -> Yield ("n", no)
+let rec count =
+  let rec loop n =
+    fun () -> Yield (n, loop (n + 1)) in
+  loop 0
 
 let nth n =
   let rec loop i () =
     Await begin fun x ->
-      if i = n then fun () -> Ready x
+      if i = n then fun () -> Yield (x, zero)
       else loop (i + 1)
     end
   in loop 0
 
-let rec take n () =
-  if n = 0 then Ready ()
-  else Await (fun i -> fun () -> Yield (i, take (n - 1)))
+let rec take n =
+  if n = 0 then zero
+  else fun () -> Await (fun i -> fun () -> Yield (i, take (n - 1)))
 
 let rec map f =
-  fun () -> Await (fun x -> fun () -> Yield (f x, map f))
+  fun () -> Await (fun i -> fun () -> Yield (f i, map f))
+
+let rec print =
+  fun () -> Await (fun i -> print_endline i; print)
 
 let rec of_chan ch =
   match Exn.as_option End_of_file input_line ch with
   | Some line -> fun () -> Yield (line, of_chan ch)
   | None -> zero
+
+(* let rec mux t = *)
+  (* match t with *)
+  (* | Yield (o, t') -> (Yield (o, t'), Yield (o, t')) *)
+  (* | _ -> failwith "not compatible" *)
+
+(* let rec merge t1 t2 = *)
+  (* match t1, t2 with *)
+  (* | Yield (o1, t1'), Yield (o2, t2') -> Yield ((o1, o2), merge t1' t2') *)
+  (* | _ -> failwith "not compatible" *)
+
+(* let split t = (map fst t, map snd t);; *)
 
 
 

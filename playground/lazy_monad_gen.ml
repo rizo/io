@@ -81,8 +81,3 @@ let count () =
     lazy (Next (n, loop (n + 1))) in
   loop 0
 
-(* let count () =                 *)
-(*   let rec loop n =             *)
-(*     yield n >> loop (n + 1) in *)
-(*   loop 0                       *)
-

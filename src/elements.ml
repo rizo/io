@@ -84,15 +84,28 @@ module Exn = struct
 end
 
 
-module Coroutine = struct
-  type ('i, 'o) coroutine = { run : ('i -> ('o * ('i, 'o) coroutine)) }
+module type Coroutine = sig
+  type ('i, 'o) t
+  val map : ('a -> 'b) -> ('i, 'a) t -> ('i, 'b) t
+end
 
-  let rec map : ('a -> 'b) -> ('i, 'a) coroutine -> ('i, 'b) coroutine =
-    fun f c -> {
-        run = fun i ->
-          let (o, c') = c.run i in
-          (f o, map f c')
-      }
+module Coroutine : Coroutine = struct
+  type ('i, 'o) t = {
+    run : ('i -> ('o * ('i, 'o) t))
+  }
+
+  let rec map f c = {
+    run = fun i ->
+      let (o, c') = c.run i in
+      (f o, map f c')
+  }
+end
+
+
+module Either = struct
+  type ('a, 'b) t =
+    | Left  of 'a
+    | Right of 'b
 end
 
 module Base = struct

@@ -2,27 +2,27 @@
 
 open Elements
 
-type ('a, 'b, 'r) task = unit -> ('a, 'b, 'r) task_status
- and ('a, 'b, 'r) task_status =
-   | Ready of 'r
-   | Yield of ('b *  ('a, 'b, 'r) task)
-   | Await of ('a -> ('a, 'b, 'r) task)
+type ('a, 'b) task = unit -> ('a, 'b) task_status
+ and ('a, 'b) task_status =
+   | Ready
+   | Yield of ('b *  ('a, 'b) task)
+   | Await of ('a -> ('a, 'b) task)
 
-type ('o, 'a) producer = (unit, 'o  , 'a) task
-type ('i, 'a) consumer = ('i  , unit, 'a) task
-type      'a  workflow = (unit, unit, 'a) task
+type 'o producer = (unit, 'o  ) task
+type 'i consumer = ('i  , unit) task
 
 let zero =
-  fun () -> Ready ()
+  fun () -> Ready
 
 let return x =
   fun () -> Yield (x, zero)
 
 let rec (>>=) t f =
   match t () with
-  | Ready a       -> f a
-  | Yield (o, t') -> fun () -> Yield (o, t' >>= f)
-  | Await k       -> fun () -> Await (fun i -> k i >>= f)
+  | Ready                            -> fun () -> Ready
+  | Yield (o, t') when t' () = Ready -> f o
+  | Yield (o, t')                    -> fun () -> Yield (o, t' >>= f)
+  | Await k                          -> fun () -> Await (fun i -> k i >>= f)
 
 let (>>) t1 t2 =
   t1 >>= fun () -> t2
@@ -35,11 +35,11 @@ let await =
 
 let rec (<-<) t1 t2 =
   match t1 (), t2 () with
-  | Ready a        , _              -> fun () -> Ready a
+  | Ready          , _              -> fun () -> Ready
   | Yield (b, t1') , t2'            -> fun () -> Yield (b, t1' <-< t2)
   | Await f        , Yield (b, t2') -> f b <-< t2'
   | t1'            , Await f        -> fun () -> Await (fun a -> t1 <-< f a)
-  | _              , Ready a        -> fun () -> Ready a
+  | _              , Ready          -> fun () -> Ready
 
 let rec cat =
   fun () ->
@@ -47,9 +47,10 @@ let rec cat =
 
 let rec run t =
   match t () with
-  | Ready r       -> r
-  | Yield (Void, b) -> run b
-  | Await k       -> run (k ())
+  | Ready                            -> None
+  | Yield (o, t') when t' () = Ready -> Some o
+  | Yield (o, t')                    -> run t'
+  | Await k                          -> run (k ())
 
 let rec repeat a =
   fun () -> Yield (a, repeat a)
@@ -90,6 +91,23 @@ let rec of_chan ch =
   match Exn.as_option End_of_file input_line ch with
   | Some line -> fun () -> Yield (line, of_chan ch)
   | None -> zero
+
+let to_list producer =
+  let rec go acc t =
+    match t() with
+    | Ready -> acc
+    | Yield (o, t') -> go (o::acc) t'
+    | Await k       -> failwith "should be closed"
+  in go [] producer
+
+(* toList :: Producer a Identity () -> [a]    *)
+(* toList = go                                *)
+(*   where                                    *)
+(*     go p = case p of                       *)
+(*         Request v _  -> closed v           *)
+(*         Respond a fu -> a:go (fu ())       *)
+(*         M         m  -> go (runIdentity m) *)
+(*         Pure    _    -> []                 *)
 
 (* let rec mux t = *)
   (* match t with *)

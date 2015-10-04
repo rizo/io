@@ -101,15 +101,21 @@ module Coroutine : Coroutine = struct
   }
 end
 
-
-module Either = struct
-  type ('a, 'b) t =
-    | Left  of 'a
-    | Right of 'b
-end
-
 module Base = struct
   type void = Void
+
+  (* Either *)
+  type ('a, 'b) either =
+    | Left  of 'a
+    | Right of 'b
+
+  let either f g x =
+    match x with
+    | Left  l -> f l
+    | Right r -> g r
+
+  (* Lazy *)
+  let force = Lazy.force
 
   let time f x =
     let t = Unix.gettimeofday () in
@@ -119,10 +125,13 @@ module Base = struct
     fx
 
   let fail = Exn.fail
+
   let print = print_endline
   let fmt = Printf.sprintf
 
+  (* Fn *)
   let flip = Fn.flip
+  let id = Fn.id
 end
 
 include Base

@@ -146,6 +146,9 @@ module Base = struct
   (* Fn *)
   let flip = Fn.flip
   let id = Fn.id
+
+  (* List *)
+  let cons x xs = x::xs
 end
 
 include Base

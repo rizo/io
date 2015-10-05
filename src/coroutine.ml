@@ -6,7 +6,6 @@ module Trampoline : sig
   and 'a trampoline' =
     | Cont of 'a trampoline
     | Done of 'a
-  type 'a t = 'a trampoline
   val pure : 'a -> 'a trampoline
   val ( >>= ) : 'a trampoline -> ('a -> 'b trampoline) -> 'b trampoline
   val ( >> ) : unit trampoline -> 'a trampoline -> 'a trampoline
@@ -19,8 +18,6 @@ end = struct
   and 'a trampoline' =
     | Cont of 'a trampoline
     | Done of 'a
-
-  type 'a t = 'a trampoline
 
   let pure x = fun () -> Done x
 
@@ -48,7 +45,55 @@ end = struct
     List.fold_right (zip_with cons) xs (pure [])
 end
 
-module Test = struct
+module Generator : sig
+  type ('a, 'x) gen = unit -> ('a, 'x) status'
+   and ('a, 'x) status' =
+    | Cont of 'a * ('a, 'x) gen
+    | Done of 'x
+  val pure : 'x -> ('a, 'x) gen
+  val ( >>= ) : ('a, 'x) gen -> ('x -> ('a, 'y) gen) -> ('a, 'y) gen
+  val ( >> ) : ('a, unit) gen -> ('a, 'x) gen -> ('a, 'x) gen
+  val yield : 'a -> ('a, unit) gen
+  val run : ('a, 'x) gen -> ('a list * 'x)
+end = struct
+  type ('a, 'x) gen = unit -> ('a, 'x) status'
+   and ('a, 'x) status' =
+    | Cont of 'a * ('a, 'x) gen
+    | Done of 'x
+
+  let pure x = fun () -> Done x
+
+  let rec (>>=) g f = fun () ->
+    match g () with
+    | Cont (a, k) -> Cont (a, k >>= f)
+    | Done x -> (f x) ()
+
+  let (>>) g1 g2 =
+    g1 >>= fun () -> g2
+
+  let yield a = fun () -> Cont (a, pure ())
+
+  let rec run g =
+    let rec run' f g =
+      match g () with
+      | Cont (a, k) -> run' Fn.(f @. (cons a)) k
+      | Done x -> (f [], x)
+    in run' id g
+
+  (* let rec zip_with f t1 t2 = fun () -> *)
+    (* match t1 (), t2 () with *)
+    (* | Cont a, Cont b -> Cont (zip_with f a b) *)
+    (* | Cont a, Done b -> Cont (zip_with f a (pure b)) *)
+    (* | Done a, Cont b -> Cont (zip_with f (pure a) b) *)
+    (* | Done a, Done b -> Done (f a b) *)
+
+  (* let interleave xs = *)
+    (* List.fold_right (zip_with cons) xs (pure []) *)
+end
+
+
+
+module Test_trampoline = struct
   open Trampoline
 
   let hello name = begin
@@ -63,3 +108,15 @@ module Test = struct
     | Done x -> fail "could not bounce"
 end
 
+module Test_generator = struct
+  open Generator
+
+  let gen = begin
+    (fun () -> Done (print_string "yielding one, ")) >>
+    yield 1 >>
+    (fun () -> Done (print_string "then two, ")) >>
+    yield 2 >>
+    (fun () -> Done (print_string "returning three: ")) >>
+    pure 3
+  end
+end

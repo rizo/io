@@ -5,7 +5,7 @@ module Trampoline : sig
   type 'a trampoline = unit -> 'a trampoline'
   and 'a trampoline' =
     | Cont of 'a trampoline
-    | Done of 'a
+    | Stop of 'a
   val pure : 'a -> 'a trampoline
   val ( >>= ) : 'a trampoline -> ('a -> 'b trampoline) -> 'b trampoline
   val ( >> ) : unit trampoline -> 'a trampoline -> 'a trampoline
@@ -17,14 +17,14 @@ end = struct
   type 'a trampoline = unit -> 'a trampoline'
   and 'a trampoline' =
     | Cont of 'a trampoline
-    | Done of 'a
+    | Stop of 'a
 
-  let pure x = fun () -> Done x
+  let pure x = fun () -> Stop x
 
   let rec (>>=) t f = fun () ->
     match t () with
     | Cont t' -> Cont (t' >>= f)
-    | Done r -> (f r) ()
+    | Stop r -> (f r) ()
 
   let (>>) t1 t2 =
     t1 >>= fun () -> t2
@@ -32,14 +32,14 @@ end = struct
   let pause () = Cont (pure ())
 
   let rec run t =
-    match t () with Cont k -> run k | Done r -> r
+    match t () with Cont k -> run k | Stop r -> r
 
   let rec zip_with f t1 t2 = fun () ->
     match t1 (), t2 () with
     | Cont a, Cont b -> Cont (zip_with f a b)
-    | Cont a, Done b -> Cont (zip_with f a (pure b))
-    | Done a, Cont b -> Cont (zip_with f (pure a) b)
-    | Done a, Done b -> Done (f a b)
+    | Cont a, Stop b -> Cont (zip_with f a (pure b))
+    | Stop a, Cont b -> Cont (zip_with f (pure a) b)
+    | Stop a, Stop b -> Stop (f a b)
 
   let interleave xs =
     List.fold_right (zip_with cons) xs (pure [])
@@ -49,7 +49,7 @@ module Generator : sig
   type ('a, 'x) gen = unit -> ('a, 'x) status'
    and ('a, 'x) status' =
     | Cont of 'a * ('a, 'x) gen
-    | Done of 'x
+    | Stop of 'x
   val pure : 'x -> ('a, 'x) gen
   val ( >>= ) : ('a, 'x) gen -> ('x -> ('a, 'y) gen) -> ('a, 'y) gen
   val ( >> ) : ('a, unit) gen -> ('a, 'x) gen -> ('a, 'x) gen
@@ -59,14 +59,14 @@ end = struct
   type ('a, 'x) gen = unit -> ('a, 'x) status'
    and ('a, 'x) status' =
     | Cont of 'a * ('a, 'x) gen
-    | Done of 'x
+    | Stop of 'x
 
-  let pure x = fun () -> Done x
+  let pure x = fun () -> Stop x
 
   let rec (>>=) g f = fun () ->
     match g () with
     | Cont (a, k) -> Cont (a, k >>= f)
-    | Done x -> (f x) ()
+    | Stop x -> (f x) ()
 
   let (>>) g1 g2 =
     g1 >>= fun () -> g2
@@ -77,7 +77,7 @@ end = struct
     let rec run' f g =
       match g () with
       | Cont (a, k) -> run' Fn.(f @. (cons a)) k
-      | Done x -> (f [], x)
+      | Stop x -> (f [], x)
     in run' id g
 end
 
@@ -86,7 +86,7 @@ module Iteratee : sig
   type ('a, 'x) iter = unit -> ('a, 'x) status'
    and ('a, 'x) status' =
     | Cont of ('a -> ('a, 'x) iter)
-    | Done of 'x
+    | Stop of 'x
   val pure : 'x -> ('a, 'x) iter
   val ( >>= ) : ('a, 'x) iter -> ('x -> ('a, 'y) iter) -> ('a, 'y) iter
   val ( >> ) : ('a, unit) iter -> ('a, 'x) iter -> ('a, 'x) iter
@@ -96,14 +96,14 @@ end = struct
   type ('a, 'x) iter = unit -> ('a, 'x) status'
    and ('a, 'x) status' =
     | Cont of ('a -> ('a, 'x) iter)
-    | Done of 'x
+    | Stop of 'x
 
-  let pure x = fun () -> Done x
+  let pure x = fun () -> Stop x
 
   let rec (>>=) g f = fun () ->
     match g () with
     | Cont k -> Cont (fun a -> k a >>= f)
-    | Done x -> (f x) ()
+    | Stop x -> (f x) ()
 
   let (>>) g1 g2 =
     g1 >>= fun () -> g2
@@ -113,35 +113,65 @@ end = struct
   let rec run xs i =
     match xs, i () with
     | a::rest, Cont k -> run rest (k a)
-    | a::rest, Done x -> x
+    | a::rest, Stop x -> x
     | []     , Cont k -> fail "no more values to feed."
-    | []     , Done x -> x
+    | []     , Stop x -> x
+end
+
+module Coroutine(Suspend : Functor) : sig
+  type 'r coroutine = unit -> 'r status
+   and 'r status =
+    | Cont of 'r coroutine Suspend.t
+    | Stop of 'r
+  val pure : 'r -> 'r coroutine
+  val ( >>= ) : 'a coroutine -> ('a -> 'b coroutine) -> 'b coroutine
+  val suspend : 'r coroutine Suspend.t -> 'r coroutine
+end = struct
+  type 'r coroutine = unit -> 'r status
+   and 'r status =
+    | Cont of 'r coroutine Suspend.t
+    | Stop of 'r
+
+  let pure x = fun () -> Stop x
+
+  let rec (>>=) c f = fun () ->
+    match c () with
+    | Cont k -> Cont (Suspend.map (fun x -> x >>= f) k)
+    | Stop r -> (f r) ()
+
+  let suspend s = fun () -> Cont s
+end
+
+module Generalized = struct
+  module Trampoline = Coroutine(Id)
+  module Generator  = Coroutine(T2)
+  module Iteratee   = Coroutine(Fn)
 end
 
 module Test_trampoline = struct
   open Trampoline
 
   let trampoline = begin
-    (fun () -> Done (print_string "hello, ")) >>
+    (fun () -> Stop (print_string "hello, ")) >>
     pause >>
-    (fun () -> Done (print "world"))
+    (fun () -> Stop (print "world"))
   end
 
   let test () =
     match trampoline () with
     | Cont k -> print_string "wonderful "; run k
-    | Done x -> fail "could not bounce"
+    | Stop x -> fail "could not bounce"
 end
 
 module Test_generator = struct
   open Generator
 
   let gen = begin
-    (fun () -> Done (print_string "yielding one, ")) >>
+    (fun () -> Stop (print_string "yielding one, ")) >>
     yield 1 >>
-    (fun () -> Done (print_string "then two, ")) >>
+    (fun () -> Stop (print_string "then two, ")) >>
     yield 2 >>
-    (fun () -> Done (print_string "returning three: ")) >>
+    (fun () -> Stop (print_string "returning three: ")) >>
     pure 3
   end
 
@@ -153,10 +183,10 @@ module Test_iteratee = struct
   open Iteratee
 
   let iter = begin
-    (fun () -> Done (print_string "enter two numbers: ")) >>
+    (fun () -> Stop (print_string "enter two numbers: ")) >>
     await >>= fun a ->
     await >>= fun b ->
-    (fun () -> Done (print_endline ("sum is " ^ string_of_int (a + b))))
+    (fun () -> Stop (print_endline ("sum is " ^ string_of_int (a + b))))
   end
 
   let test () =

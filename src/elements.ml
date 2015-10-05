@@ -3,6 +3,28 @@
  * Elements
  *)
 
+module type Type0 = sig
+  type t
+end
+
+module type Type1 = sig
+  type 'a t
+end
+
+module type Type2 = sig
+  type ('a, 'b) t
+end
+
+module type Functor = sig
+  type 'a t
+  val map : ('a -> 'b) -> 'a t -> 'b t
+end
+
+module Id = struct
+  type 'a t = 'a
+  let map x = x
+end
+
 module Fn = struct
   type ('a, 'b) t = 'a -> 'b
   let compose f g = fun x -> f (g x)

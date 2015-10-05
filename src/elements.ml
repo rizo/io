@@ -101,18 +101,32 @@ module Coroutine : Coroutine = struct
   }
 end
 
+module Either = struct
+  module Public = struct
+    type ('a, 'b) either =
+      | Left  of 'a
+      | Right of 'b
+
+    let either f g x =
+      match x with
+      | Left  l -> f l
+      | Right r -> g r
+  end
+  include Public
+  type ('a, 'b) t = ('a, 'b) either
+
+  let pure x = Right x
+
+  let (>>=) m f =
+    match m with
+    | Right x -> f x
+    | Left e  -> Left e
+end
+
 module Base = struct
   type void = Void
 
-  (* Either *)
-  type ('a, 'b) either =
-    | Left  of 'a
-    | Right of 'b
-
-  let either f g x =
-    match x with
-    | Left  l -> f l
-    | Right r -> g r
+  include Either.Public
 
   (* Lazy *)
   let force = Lazy.force

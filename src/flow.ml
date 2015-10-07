@@ -2,28 +2,28 @@
 
 open Elements
 
- type ('i, 'o) action =
-   | Close
-   | Yield of ('o  * ('i, 'o) action)
-   | Await of ('i -> ('i, 'o) action)
+ type ('i, 'o) stream =
+   | Empty
+   | Yield of ('o  * ('i, 'o) stream)
+   | Await of ('i -> ('i, 'o) stream)
 
 let return x =
-  Yield (x, Close)
+  Yield (x, Empty)
 
 let rec (<-<) t1 t2 =
   match t1, t2 with
-  | Close         , _             -> Close
+  | Empty         , _             -> Empty
   | Yield (b, t') , _             -> Yield (b, t' <-< t2)
   | Await k       , Yield (b, t') -> k b <-< t'
   | _             , Await k       -> Await (fun a -> t1 <-< k a)
-  | _             , Close         -> Close
+  | _             , Empty         -> Empty
 
 let (>->) t2 t1 = t1 <-< t2
 
 
 let rec (>>=) a f =
   match a with
-  | Close         -> Close
+  | Empty         -> Empty
   | Yield (x, a') -> f x >-> (a' >>= f)
   | Await k       -> Await (fun x -> k x >>= f)
 

@@ -2,112 +2,137 @@
 
 open Elements
 
-type ('a, 'b) task = unit -> ('a, 'b) task_status
- and ('a, 'b) task_status =
-   | Ready
-   | Yield of ('b *  ('a, 'b) task)
-   | Await of ('a -> ('a, 'b) task)
-
-type 'o producer = (unit, 'o  ) task
-type 'i consumer = ('i  , unit) task
-
-let zero =
-  fun () -> Ready
+ type ('i, 'o) action =
+   | Close
+   | Yield of ('o  * ('i, 'o) action)
+   | Await of ('i -> ('i, 'o) action)
 
 let return x =
-  fun () -> Yield (x, zero)
+  Yield (x, Close)
 
-let rec (>>=) t f =
-  match t () with
-  | Ready                            -> fun () -> Ready
-  | Yield (o, t') when t' () = Ready -> f o
-  | Yield (o, t')                    -> fun () -> Yield (o, t' >>= f)
-  | Await k                          -> fun () -> Await (fun i -> k i >>= f)
+let rec (<-<) t1 t2 =
+  match t1, t2 with
+  | Close         , _             -> Close
+  | Yield (b, t') , _             -> Yield (b, t' <-< t2)
+  | Await k       , Yield (b, t') -> k b <-< t'
+  | _             , Await k       -> Await (fun a -> t1 <-< k a)
+  | _             , Close         -> Close
+
+let (>->) t2 t1 = t1 <-< t2
+
+
+let rec (>>=) a f =
+  match a with
+  | Close         -> Close
+  | Yield (x, a') -> f x >-> (a' >>= f)
+  | Await k       -> Await (fun x -> k x >>= f)
+
 
 let (>>) t1 t2 =
   t1 >>= fun () -> t2
 
-let yield b =
-  fun () -> Yield (b, zero)
 
-let await =
-  fun () -> Await (fun i () -> Yield (i, zero))
+(* type ('i, 'o) action = unit -> ('i, 'o) status *)
+(*  and ('i, 'o) status = *)
+(*    | Close *)
+(*    | Yield of ('o  * ('i, 'o) action) *)
+(*    | Await of ('i -> ('i, 'o) action) *)
 
-let rec (<-<) t1 t2 =
-  match t1 (), t2 () with
-  | Ready          , _              -> fun () -> Ready
-  | Yield (b, t1') , t2'            -> fun () -> Yield (b, t1' <-< t2)
-  | Await f        , Yield (b, t2') -> f b <-< t2'
-  | t1'            , Await f        -> fun () -> Await (fun a -> t1 <-< f a)
-  | _              , Ready          -> fun () -> Ready
+(* let return x = *)
+(*   fun () -> Yield (x, fun () -> Close) *)
 
-let rec cat =
-  fun () ->
-    Await (fun a -> fun () -> Yield (a, cat))
+(* let rec (<-<) t1 t2 = *)
+(*   match t1 (), t2 () with *)
+(*   | Close         , _             -> fun () -> Close *)
+(*   | Yield (b, t') , _             -> fun () -> Yield (b, t' <-< t2) *)
+(*   | Await k       , Yield (b, t') -> k b <-< t' *)
+(*   | _             , Await k       -> fun () -> Await (fun a -> t1 <-< k a) *)
+(*   | _             , Close         -> fun () -> Close *)
 
-let rec run t =
-  match t () with
-  | Ready                            -> None
-  | Yield (o, t') when t' () = Ready -> Some o
-  | Yield (o, t')                    -> run t'
-  | Await k                          -> run (k ())
+(* let (>->) t2 t1 = (<-<) t1 t2 *)
 
-let rec repeat a =
-  fun () -> Yield (a, repeat a)
 
-let rec repeatedly f =
-  fun () -> Yield (f (), repeatedly f)
+(* let rec (>>=) a f = *)
+(*   match a () with *)
+(*   | Close         -> fun () -> Close *)
+(*   | Yield (x, a') -> f x >-> (a' >>= f) *)
+(*   | Await k       -> fun () -> Await (fun x -> k x >>= f) *)
 
-let rec discard =
-  fun () -> Await (fun i -> discard)
 
-let rec yes = repeat "y"
-let rec  no = repeat "n"
+(* let (>>) t1 t2 = *)
+(*   t1 >>= fun () -> t2 *)
 
-let rec count =
-  let rec loop n =
-    fun () -> Yield (n, loop (n + 1)) in
-  loop 0
+(* let _yield b = *)
+(*   fun () -> Yield (b, fun () -> Close) *)
 
-let nth n =
-  let rec loop i () =
-    Await begin fun x ->
-      if i = n then fun () -> Yield (x, zero)
-      else loop (i + 1)
-    end
-  in loop 0
+(* let _await = *)
+(*   fun () -> Await (fun a -> fun () -> Yield (a, fun () -> Close)) *)
 
-let rec take n =
-  if n = 0 then zero
-  else fun () -> Await (fun i -> fun () -> Yield (i, take (n - 1)))
 
-let rec map f =
-  fun () -> Await (fun i -> fun () -> Yield (f i, map f))
+(* let rec cat = *)
+(*   fun () -> *)
+(*     Await (fun a -> fun () -> Yield (a, cat)) *)
 
-let rec print =
-  fun () -> Await (fun i -> print_endline i; print)
+(* let rec run t = *)
+(*   match t () with *)
+(*   | Close                            -> None *)
+(*   | Yield (x, t') when t' () = Close -> Some x *)
+(*   | Yield (x, t')                    -> run t' *)
+(*   | Await k                          -> run (k ()) *)
 
-let rec of_chan ch =
-  match Exn.as_option End_of_file input_line ch with
-  | Some line -> fun () -> Yield (line, of_chan ch)
-  | None -> zero
+(* let rec repeat a = *)
+(*   fun () -> Yield (a, repeat a) *)
 
-let to_list producer =
-  let rec go acc t =
-    match t() with
-    | Ready -> acc
-    | Yield (o, t') -> go (o::acc) t'
-    | Await k       -> failwith "should be closed"
-  in go [] producer
+(* let rec repeatedly f = *)
+(*   fun () -> Yield (f (), repeatedly f) *)
 
-(* toList :: Producer a Identity () -> [a]    *)
-(* toList = go                                *)
-(*   where                                    *)
-(*     go p = case p of                       *)
-(*         Request v _  -> closed v           *)
-(*         Respond a fu -> a:go (fu ())       *)
-(*         M         m  -> go (runIdentity m) *)
-(*         Pure    _    -> []                 *)
+(* let rec discard = *)
+(*   fun () -> Await (fun i -> discard) *)
+
+(* let rec yes = repeat "y" *)
+(* let rec  no = repeat "n" *)
+
+(* let rec count = *)
+(*   let rec loop n = *)
+(*     fun () -> Yield (n, loop (n + 1)) in *)
+(*   loop 0 *)
+
+(* let nth n = *)
+(*   let rec loop i = *)
+(*     fun () -> Await (fun a -> *)
+(*         if i = n *)
+(*         then fun () -> Yield (a, fun () -> Close) *)
+(*         else loop (i + 1)) *)
+(*   in loop 0 *)
+
+(* let rec take n = *)
+(*   if n = 0 *)
+(*   then fun () -> Close *)
+(*   else fun () -> Await (fun i -> fun () -> Yield (i, take (n - 1))) *)
+
+(* let rec map f = *)
+(*   fun () -> Await (fun a -> fun () -> Yield (f a, map f)) *)
+
+(* let rec print = *)
+(*   fun () -> Await (fun a -> print_endline a; print) *)
+
+(* let rec of_chan ch = *)
+(*   match Exn.as_option End_of_file input_line ch with *)
+(*   | Some line -> fun () -> Yield (line, of_chan ch) *)
+(*   | None      -> fun () -> Close *)
+
+(* let rec of_list xs = *)
+(*   match xs with *)
+(*   | x::xs' -> fun () -> Yield (x, of_list xs') *)
+(*   | []     -> fun () -> Close *)
+
+(* let to_list producer = *)
+(*   let rec go acc t = *)
+(*     match t () with *)
+(*     | Close         -> acc *)
+(*     | Yield (o, t') -> go (o::acc) t' *)
+(*     | Await k       -> failwith "should be closed" *)
+(*   in go [] producer *)
 
 (* let rec mux t = *)
   (* match t with *)

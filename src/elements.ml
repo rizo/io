@@ -7,6 +7,8 @@ module type Type0 = sig
   type t
 end
 
+module type Type = Type0
+
 module type Type1 = sig
   type 'a t
 end
@@ -20,7 +22,10 @@ module type Functor = sig
   val map : ('a -> 'b) -> 'a t -> 'b t
 end
 
+
 module Id = struct
+  module Make (X : Type) = X
+
   type 'a t = 'a
   let map x = x
 end
@@ -70,9 +75,6 @@ module Opt = struct
 
   let zero =
     return ()
-
-  let delay f =
-    f
 
   let combine opt dopt =
     bind opt (fun () -> dopt ())
@@ -147,6 +149,9 @@ end
 
 module Base = struct
   type void = Void
+  type ('a, 'e) result =
+    | Ok    of 'a
+    | Error of 'e
 
   include Either.Public
 

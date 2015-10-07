@@ -6,7 +6,7 @@ module Trampoline : sig
   and 'a trampoline' =
     | Cont of 'a trampoline
     | Stop of 'a
-  val pure : 'a -> 'a trampoline
+  val return : 'a -> 'a trampoline
   val ( >>= ) : 'a trampoline -> ('a -> 'b trampoline) -> 'b trampoline
   val ( >> ) : unit trampoline -> 'a trampoline -> 'a trampoline
   val pause : unit trampoline
@@ -19,7 +19,7 @@ end = struct
     | Cont of 'a trampoline
     | Stop of 'a
 
-  let pure x = fun () -> Stop x
+  let return x = fun () -> Stop x
 
   let rec (>>=) t f = fun () ->
     match t () with
@@ -29,7 +29,7 @@ end = struct
   let (>>) t1 t2 =
     t1 >>= fun () -> t2
 
-  let pause () = Cont (pure ())
+  let pause () = Cont (return ())
 
   let rec run t =
     match t () with Cont k -> run k | Stop r -> r
@@ -37,12 +37,12 @@ end = struct
   let rec zip_with f t1 t2 = fun () ->
     match t1 (), t2 () with
     | Cont a, Cont b -> Cont (zip_with f a b)
-    | Cont a, Stop b -> Cont (zip_with f a (pure b))
-    | Stop a, Cont b -> Cont (zip_with f (pure a) b)
+    | Cont a, Stop b -> Cont (zip_with f a (return b))
+    | Stop a, Cont b -> Cont (zip_with f (return a) b)
     | Stop a, Stop b -> Stop (f a b)
 
   let interleave xs =
-    List.fold_right (zip_with cons) xs (pure [])
+    List.fold_right (zip_with cons) xs (return [])
 end
 
 module Generator : sig
@@ -50,7 +50,7 @@ module Generator : sig
    and ('a, 'x) status' =
     | Cont of 'a * ('a, 'x) gen
     | Stop of 'x
-  val pure : 'x -> ('a, 'x) gen
+  val return : 'x -> ('a, 'x) gen
   val ( >>= ) : ('a, 'x) gen -> ('x -> ('a, 'y) gen) -> ('a, 'y) gen
   val ( >> ) : ('a, unit) gen -> ('a, 'x) gen -> ('a, 'x) gen
   val yield : 'a -> ('a, unit) gen
@@ -61,7 +61,7 @@ end = struct
     | Cont of 'a * ('a, 'x) gen
     | Stop of 'x
 
-  let pure x = fun () -> Stop x
+  let return x = fun () -> Stop x
 
   let rec (>>=) g f = fun () ->
     match g () with
@@ -71,7 +71,7 @@ end = struct
   let (>>) g1 g2 =
     g1 >>= fun () -> g2
 
-  let yield a = fun () -> Cont (a, pure ())
+  let yield a = fun () -> Cont (a, return ())
 
   let rec run g =
     let rec run' f g =
@@ -87,7 +87,7 @@ module Iteratee : sig
    and ('a, 'x) status' =
     | Cont of ('a -> ('a, 'x) iter)
     | Stop of 'x
-  val pure : 'x -> ('a, 'x) iter
+  val return : 'x -> ('a, 'x) iter
   val ( >>= ) : ('a, 'x) iter -> ('x -> ('a, 'y) iter) -> ('a, 'y) iter
   val ( >> ) : ('a, unit) iter -> ('a, 'x) iter -> ('a, 'x) iter
   val await : ('a, 'a) iter
@@ -98,7 +98,7 @@ end = struct
     | Cont of ('a -> ('a, 'x) iter)
     | Stop of 'x
 
-  let pure x = fun () -> Stop x
+  let return x = fun () -> Stop x
 
   let rec (>>=) g f = fun () ->
     match g () with
@@ -108,7 +108,7 @@ end = struct
   let (>>) g1 g2 =
     g1 >>= fun () -> g2
 
-  let await = fun () -> Cont pure
+  let await = fun () -> Cont return
 
   let rec run xs i =
     match xs, i () with
@@ -123,7 +123,8 @@ module Coroutine(Suspend : Functor) : sig
    and 'r status =
     | Cont of 'r coroutine Suspend.t
     | Stop of 'r
-  val pure : 'r -> 'r coroutine
+  type 'r t = 'r coroutine
+  val return : 'r -> 'r coroutine
   val ( >>= ) : 'a coroutine -> ('a -> 'b coroutine) -> 'b coroutine
   val suspend : 'r coroutine Suspend.t -> 'r coroutine
 end = struct
@@ -131,8 +132,9 @@ end = struct
    and 'r status =
     | Cont of 'r coroutine Suspend.t
     | Stop of 'r
+  type 'r t = 'r coroutine
 
-  let pure x = fun () -> Stop x
+  let return x = fun () -> Stop x
 
   let rec (>>=) c f = fun () ->
     match c () with
@@ -142,11 +144,6 @@ end = struct
   let suspend s = fun () -> Cont s
 end
 
-module Generalized = struct
-  module Trampoline = Coroutine(Id)
-  module Generator  = Coroutine(T2)
-  module Iteratee   = Coroutine(Fn)
-end
 
 module Test_trampoline = struct
   open Trampoline
@@ -172,7 +169,7 @@ module Test_generator = struct
     (fun () -> Stop (print_string "then two, ")) >>
     yield 2 >>
     (fun () -> Stop (print_string "returning three: ")) >>
-    pure 3
+    return 3
   end
 
   let test () =

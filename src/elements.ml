@@ -27,7 +27,7 @@ module Id = struct
   module Make (X : Type) = X
 
   type 'a t = 'a
-  let map x = x
+  let map f x = f x
 end
 
 module Fn = struct

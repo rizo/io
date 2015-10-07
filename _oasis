@@ -17,8 +17,16 @@ Description:
 Library "iter"
     Path:           src
     CompiledObject: best
-    Modules:        Iter, Elements
+    Modules:        Iter, Elements, Flow
+    BuildDepends:   unix
     Install:        true
+
+Executable "test_flow"
+  Path: test
+  MainIs: test_flow.ml
+  CompiledObject: best
+  Install: false
+  BuildDepends: iter
 
 SourceRepository master
   Type:     git

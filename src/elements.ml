@@ -153,6 +153,8 @@ module Base = struct
     | Ok    of 'a
     | Error of 'e
 
+  let discard _ = ()
+
   include Either.Public
 
   (* Lazy *)

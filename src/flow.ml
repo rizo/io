@@ -2,10 +2,6 @@
 
 open Elements
 
-type 'a input =
-  | Next of 'a
-  | Stop
-
 type ('i, 'o, 'a) stream =
   | Close
   | Error of exn
@@ -33,8 +29,8 @@ let rec compose s1 s2 =
   | Await _        , Close          -> Close
   | Await _        , Value x        -> Value x
 
-let (<=) s1 s2 = compose s1 s2
-let (=>) s2 s1 = compose s1 s2
+let (=<=) s1 s2 = compose s1 s2
+let (=>=) s2 s1 = compose s1 s2
 
 let rec (>>=) s f =
   match s with
@@ -92,17 +88,19 @@ let rec yes = Yield ("y", yes)
 let rec count n =
   Yield (n, count (n + 1))
 
-(* `nth n` - yield the result    *)
-(* let nth n =                   *)
-(*   let rec loop i =            *)
-(*     Await (fun a ->           *)
-(*         if i = n              *)
-(*         then Yield (a, empty) *)
-(*         else loop (i + 1))    *)
-(*   in loop 0                   *)
+(* nth: canonical list definition *)
+let nth_list l n =
+  if n < 0 then
+    raise (Invalid_argument "nth: negative index")
+  else
+    let rec loop l n =
+      match l with
+      | [] -> raise (Failure "nth: index out of rande")
+      | a::l -> if n = 0 then a else loop l (n-1)
+    in loop l n
 
-(* `nth n` - returns the result  *)
-let nth n : ('a, void, 'a) stream =
+(* nth: agnostic to input, never fails *)
+let nth_platonic n =
   let rec loop i =
     Await (fun x ->
         if i = n
@@ -110,21 +108,50 @@ let nth n : ('a, void, 'a) stream =
         else loop (i + 1))
   in loop 0
 
-let to_list : ('a option, void, 'a list) stream =
+(* nth: fails when input ends *)
+let nth_opt_input idx =
+  if idx < 0 then
+    Error (Invalid_argument "nth: negative index")
+  else
+    let rec loop count = function
+      | None -> Error (Failure "nth: index out of range")
+      | Some a ->
+        if count = idx then Value a
+        else Await (loop (count + 1))
+    in Await (loop 0)
+
+(* nth: directly uses the stream *)
+let nth_direct idx stream =
+  if idx < 0 then
+    Error (Invalid_argument "nth: negative index")
+  else
+    let rec loop count stream =
+      match stream with
+      | Error e       -> Error e
+      | Close         -> Error (Failure "nth: index out of range")
+      | Value _       -> Error (Failure "nt: already has a value")
+      | Yield (a, stream) ->
+        if count = idx then Value a
+        else loop (count + 1) stream
+      | Await k       -> Error (Failure "nth: should be closed")
+    in loop 0 stream
+
+let to_list () =
   let rec loop acc =
     Await (function
-        | None   -> return acc
+        | None   -> return (List.rev acc)
         | Some x -> loop (x::acc))
   in loop []
 
 let head =
-  Await (function Next a -> Value a | Stop -> Error End_of_file)
+  Await (function Some a -> Value a
+                | None   -> Error End_of_file)
 
 let length () =
   let rec loop n =
     Await (function
-        | Next a -> loop (n + 1)
-        | Stop   -> return n) in
+        | Some a -> loop (n + 1)
+        | None   -> return n) in
   loop 0
 
 let rec drop n =
@@ -132,7 +159,7 @@ let rec drop n =
   then cat
   else Await (fun a -> drop (n - 1))
 
-let last =
+let last () =
   let rec loop r =
     Await (function
         | Some a -> loop (Some a)
@@ -142,12 +169,12 @@ let last =
 let to_list' producer =
   let rec go acc s =
     match s with
+    | Error e       -> Error e
     | Close         -> Value acc
     | Value _       -> Value acc
     | Yield (o, s') -> go (o::acc) s'
     | Await k       -> failwith "should be closed"
   in go [] producer
-
 
 let sum () =
   let rec loop r =

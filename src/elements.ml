@@ -33,12 +33,21 @@ end
 module Fn = struct
   type ('a, 'b) t = 'a -> 'b
   let compose f g = fun x -> f (g x)
+  let invcompose g f = fun x -> f (g x)
   let apply f x = f x
   let map f x = compose f x
   let id x = x
   let flip f x y = f y x
   let (@@) = apply
-  let (@.) = compose
+  let (<<) = compose
+  let (>>) = invcompose
+
+  module Public = struct
+    let (<<) = (<<)
+    let (>>) = (>>)
+    let id = id
+    let flip = flip
+  end
 end
 
 module T2 = struct
@@ -46,10 +55,22 @@ module T2 = struct
   let map f (x, y) = (x, f y)
 end
 
-module Opt = struct
+module Option = struct
   type 'a t = 'a option
 
   exception No_value
+
+  let some x = Some x
+
+  let option if_none if_some opt =
+    match opt with
+    | None -> if_none
+    | Some a -> if_some a
+
+  module Public = struct
+    let some = some
+    let option = option
+  end
 
   let value_exn opt =
     match opt with
@@ -61,36 +82,20 @@ module Opt = struct
     | Some x -> x
     | None -> default
 
-  (*
-   * Monad Implementation
-   *)
+  let return x = Some x
 
-  let return x =
-    Some x
-
-  let bind opt f =
+  let (>>=) opt f =
     match opt with
     | Some x -> f x
     | None -> None
 
-  let zero =
-    return ()
+  let (>>|) opt f =
+    match opt with
+    | Some x -> Some (f x)
+    | None -> None
 
-  let combine opt dopt =
-    bind opt (fun () -> dopt ())
-
-  let run dopt = dopt ()
-
-  let (>>=) = bind
-  let (>>)  = combine
-
-  (*
-   * Monadic Combinators
-   *)
-
-  let rec forever opt =
-    opt >> fun () -> forever opt
-
+  let (>>) opt1 opt2 =
+    opt1 >>= fun _ -> opt2
 end
 
 module type Monad = sig
@@ -125,6 +130,22 @@ module Coroutine : Coroutine = struct
   }
 end
 
+module List = struct
+  let rec range s e =
+    if s = e then []
+    else s::range (s + 1) e
+
+  let iota = range 0
+
+  let rev xs =
+    let rec loop acc xs =
+      match xs with
+      | [] -> acc
+      | x::xs' -> loop (x::acc) xs'
+    in
+    loop [] xs
+end
+
 module Either = struct
   module Public = struct
     type ('a, 'b) either =
@@ -149,6 +170,7 @@ end
 
 module Base = struct
   type void = Void
+
   type ('a, 'e) result =
     | Ok    of 'a
     | Error of 'e
@@ -156,6 +178,8 @@ module Base = struct
   let discard _ = ()
 
   include Either.Public
+  include Option.Public
+  include Fn.Public
 
   (* Lazy *)
   let force = Lazy.force
@@ -172,12 +196,11 @@ module Base = struct
   let print = print_endline
   let fmt = Printf.sprintf
 
-  (* Fn *)
-  let flip = Fn.flip
-  let id = Fn.id
-
   (* List *)
   let cons x xs = x::xs
+
+  let even n = n mod 2 = 0
+  let odd  n = n mod 2 = 1
 end
 
 include Base

@@ -201,6 +201,10 @@ module Base = struct
 
   let even n = n mod 2 = 0
   let odd  n = n mod 2 = 1
+
+  let rec closed : void -> 'a
+    = fun x -> closed x
+
 end
 
 include Base

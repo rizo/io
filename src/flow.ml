@@ -1,22 +1,20 @@
 
-
 open Elements
 
-let rec closed : void -> 'a
-  = fun x -> closed x
-
-type ('i, 'o) stream = unit -> ('i, 'o) stream_state
- and ('i, 'o) stream_state =
-  | Empty
+type ('a, 'b, 'r) stream = unit -> ('a, 'b, 'r) stream_state
+ and ('a, 'b, 'r) stream_state =
+  | Ready of 'r
   | Error of exn
-  | Yield of ('o  * ('i, 'o) stream)
-  | Await of ('i -> ('i, 'o) stream)
+  | Yield of ('b  * ('a, 'b, 'r) stream)
+  | Await of ('a -> ('a, 'b, 'r) stream)
 
-type      'o  source = (void, 'o) stream
-type ('i, 'a)   sink = 'i source -> 'a
+type (        'r) workflow    = (void, void, 'r) stream
+type (    'o, 'r) producer    = (void,   'o, 'r) stream
+type ('i, 'o, 'r) transformer = ('i,     'o, 'r) stream
+type ('i,     'r) consumer    = ('i, 'r) producer -> 'r workflow
 
 let return x =
-  fun () -> Yield (x, fun () -> Empty)
+  fun () -> Ready x
 
 let rec cat =
   fun () -> Await (fun i -> fun () -> Yield (i, cat))
@@ -25,11 +23,11 @@ let rec compose s1 s2 =
   match s1 (), s2 () with
   | _              , Error e        -> fun () -> Error e
   | Error e        , _              -> fun () -> Error e
-  | Empty          , _              -> fun () -> Empty
+  | Ready r        , _              -> fun () -> Ready r
   | Yield (b, s1') , _              -> fun () -> Yield (b, compose s1' s2)
   | Await k        , Yield (b, s2') -> compose (k b) s2'
   | Await _        , Await k        -> fun () -> Await (fun a -> compose s1 (k a))
-  | Await _        , Empty          -> fun () -> Empty
+  | Await _        , Ready r        -> fun () -> Ready r
 
 let (=<=) s1 s2 = compose s1 s2
 let (=>=) s2 s1 = compose s1 s2
@@ -38,32 +36,32 @@ let (=>) x f = f x
 let rec (>>=) s f =
   match s () with
   | Error e       -> fun () -> Error e
-  | Empty         -> f ()
+  | Ready r       -> f r
   | Yield (o, s') -> fun () -> Yield (o, s' >>= f)
   | Await k       -> fun () -> Await (fun i -> k i >>= f)
 
 let (>>) s1 s2 =
-  s1 >>= fun () -> s2
+  s1 >>= fun _ -> s2
 
 let yield b =
-  fun () -> Yield (b, fun () -> Empty)
+  fun () -> Yield (b, fun () -> Ready ())
 
+(* FIXME: yield 4 >> (await >>= fun a -> return (a + 1)) => collect *)
 let await =
-  fun () -> Await (fun a -> fun () -> Yield (a, fun () -> Empty))
+  fun () -> Await (fun a -> fun () -> Ready a)
 
 (* to review *)
 let rec run s =
   match s () with
-  | Empty            -> fail "empty stream"
-  | Error e          -> raise e
-  | Await k          -> run (k Void)
-  | Yield (a, s') when s' = fun () -> Empty -> a
+  | Ready r       -> r
+  | Error e       -> raise e
+  | Await k       -> run (k Void)
   | Yield (a, s') -> run s'
 
-let next source =
-  match source () with
+let next producer =
+  match producer () with
   | Error e       -> raise e
-  | Empty         -> None
+  | Ready _       -> None
   | Yield (a, s') -> Some (a, s')
   | Await k       -> fail "invalid producer state"
 
@@ -71,7 +69,7 @@ let rec take n =
   if n < 0 then
     fun () -> Error (Invalid_argument "take: negative value")
   else if n = 0
-  then fun () -> Empty
+  then return ()
   else fun () -> Await (fun i -> fun () -> Yield (i, take (n - 1)))
 
 let rec map f =
@@ -83,33 +81,29 @@ let rec filter pred =
       then fun () -> Yield (a, filter pred)
       else filter pred)
 
-let fold f z p =
-  let rec go acc p =
-    match next p with
-    | Some (a, p') -> go (f acc a) p'
-    | None         -> acc in
-  go z p
-
 let rec print =
   fun () -> Await (fun a -> print_endline a; print)
 
 let rec print =
   map print_endline
 
-let rec source_chan ch =
+let rec of_chan ch =
   match Exn.as_option End_of_file input_line ch with
-  | Some line -> fun () -> Yield (line, source_chan ch)
-  | None      -> fun () -> Empty
+  | Some line -> fun () -> Yield (line, of_chan ch)
+  | None      -> return ()
 
-let rec source_list xs =
+let rec of_list xs =
   match xs with
-  | x::xs' -> fun () -> Yield (x, source_list xs')
-  | []     -> fun () -> Empty
+  | x::xs' -> fun () -> Yield (x, of_list xs')
+  | []     -> return ()
 
-let rec repeat x =
+(* Producers
+ * ========= *)
+
+let rec repeat x : ('a, 'r) producer =
   fun () -> Yield (x, repeat x)
 
-let yes : string source = repeat "y"
+let yes : (string, 'r) producer = repeat "y"
 
 let rec count () =
   let rec go n =
@@ -119,45 +113,8 @@ let rec count () =
 let rec iota n =
   count =>= take n
 
-(* just for comparison *)
-let nth_list n l =
-  if n < 0 then
-    raise (Invalid_argument "nth: negative index")
-  else
-    let rec loop n l =
-      match l with
-      | [] -> raise (Failure "nth: index out of rande")
-      | a::l -> if n = 0 then a else loop (n - 1) l
-    in loop n l
-
-let nth n p =
-  if n < 0 then
-    raise (Invalid_argument "nth: negative index")
-  else
-    let rec loop n p =
-      match next p with
-      | None         -> raise (Failure "nth: empty stream")
-      | Some (a, p') -> if n = 0 then a else loop (n - 1) p'
-    in loop n p
-
-let collect p =
-  let rec go acc p =
-    match next p with
-    | Some (a, p') -> go (a::acc) p'
-    | None -> List.rev acc
-  in go [] p
-
-let head p =
-  match next p with
-  | Some (a, _) -> Some a
-  | None -> None
-
-let len p =
-  let rec go total p =
-    match next p with
-    | Some (_, p') -> go (total + 1) p'
-    | None -> total in
-  go 0 p
+(* Transducers
+ * =========== *)
 
 let rec drop n =
   if n = 0
@@ -167,6 +124,46 @@ let rec drop n =
 let tail =
   fun () -> Await (fun a -> cat)
 
+(* Consumers
+ * ========= *)
+
+let fold f z p () =
+  let rec go acc p =
+    match next p with
+    | Some (a, p') -> go (f acc a) p'
+    | None         -> Ready acc in
+  go z p
+
+(* val nth : int -> ('a, 'r) producer -> 'a workflow *)
+let nth n p () =
+  if n < 0 then
+    Error (Invalid_argument "nth: negative index")
+  else
+    let rec loop n p =
+      match next p with
+      | None         -> Error (Failure "nth: empty stream")
+      | Some (a, p') -> if n = 0 then Ready a else loop (n - 1) p'
+    in loop n p
+
+let collect p () =
+  let rec go acc p =
+    match next p with
+    | Some (a, p') -> go (a::acc) p'
+    | None -> Ready (List.rev acc)
+  in go [] p
+
+let head p () =
+  match next p with
+  | Some (a, _) -> Ready a
+  | None -> Error (Failure "No head")
+
+let len p () =
+  let rec go total p =
+    match next p with
+    | Some (_, p') -> go (total + 1) p'
+    | None -> Ready total in
+  go 0 p
+
 let last p =
   let rec loop last_opt p =
     match next p with
@@ -174,13 +171,18 @@ let last p =
     | None         -> last_opt in
   loop None p
 
+(* let sum p () = *)
+  (* let rec go total p = *)
+    (* match next p with *)
+    (* | Some (a, p') -> go (total + a) p' *)
+    (* | None -> Ready total in *)
+  (* go 0 p *)
+
 let sum p = fold (+) 0 p
-let sum p =
-  let rec go total p =
-    match next p with
-    | Some (a, p') -> go (total + a) p'
-    | None -> total in
-  go 0 p
+
+(*
+ * Divices
+ *)
 
 (* let rec mux t = *)
   (* match t with *)

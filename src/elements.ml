@@ -110,6 +110,8 @@ module Exn = struct
     with e' when e' = e -> None
 
   let fail msg = raise (Failure msg)
+
+  let to_string = Printexc.to_string
 end
 
 
@@ -174,6 +176,9 @@ module Base = struct
   type ('a, 'e) result =
     | Ok    of 'a
     | Error of 'e
+
+  let ok x = Ok x
+  let error x = Error x
 
   let discard _ = ()
 

@@ -12,14 +12,14 @@ end
 
 let test_sinks () = begin
   print_endline "test_sinks";
-  assert (iota 10 => len = 10);
+  assert (iota 10 => count = 10);
   assert (iota 10 => sum = 45);
   assert (range 20 26 => last = Some 25);
 end
 
 let test_api () = begin
   print_endline "test_api";
-  assert (of_list (List.range 10 100) =>= take 10 =>= tail => len = 9);
+  assert (of_list (List.range 10 100) =>= take 10 =>= tail => count = 9);
   assert (of_list (List.range 10 100) =>= take 10 =>= filter even => sum = 70);
   assert (of_list (List.range 50 100) =>= take 10 => fold (+) 0 = 545);
   assert (iota 100000000000 =>= take 10 =>= filter even => sum = 20);

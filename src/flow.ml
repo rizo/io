@@ -4,7 +4,6 @@ open Elements
 type ('a, 'b, 'r) stream = unit -> ('a, 'b, 'r) stream_state
  and ('a, 'b, 'r) stream_state =
   | Ready of 'r
-  | Error of exn
   | Yield of ('b  * ('a, 'b, 'r) stream)
   | Await of ('a -> ('a, 'b, 'r) stream)
 
@@ -17,7 +16,6 @@ let return x =
 
 let rec (>>=) s f =
   match s () with
-  | Error e       -> fun () -> Error e
   | Ready r       -> f r
   | Yield (o, s') -> fun () -> Yield (o, s' >>= f)
   | Await k       -> fun () -> Await (fun i -> k i >>= f)
@@ -28,14 +26,11 @@ let (>>) s1 s2 =
 let yield b =
   fun () -> Yield (b, return ())
 
-(* FIXME: yield 4 >> (fun () -> Await fun a -> return (a + 1)) => collect *)
 let await =
   fun () -> Await (fun a -> return a)
 
 let rec compose s1 s2 =
   match s1 (), s2 () with
-  | _              , Error e        -> fun () -> Error e
-  | Error e        , _              -> fun () -> Error e
   | Ready r        , _              -> return r
   | Yield (b, s1') , _              -> fun () -> Yield (b, compose s1' s2)
   | Await k        , Yield (b, s2') -> compose (k b) s2'
@@ -52,21 +47,24 @@ let rec cat =
 let rec run s =
   match s () with
   | Ready r       -> r
-  | Error e       -> raise e
   | Await k       -> run (k Void)
   | Yield (a, s') -> run s'
 
-let next source : ('a * 'a source) option =
+let next source =
   match source () with
-  | Error e       -> raise e
   | Ready ()      -> None
   | Yield (a, s') -> Some (a, s')
   | Await k       -> fail "stream is still awaiting input"
 
-let rec of_chan ch =
+let rec get_line_from_chan ch =
   match Exn.as_option End_of_file input_line ch with
-  | Some line -> fun () -> Yield (line, of_chan ch)
-  | None      -> return ()
+  | Some line -> fun () -> Yield (line, get_line_from_chan ch)
+  | None -> return ()
+
+let rec get_char_from_chan ch =
+  match Exn.as_option End_of_file input_char ch with
+  | Some line -> fun () -> Yield (line, get_char_from_chan ch)
+  | None -> return ()
 
 let rec of_list xs =
   match xs with
@@ -84,7 +82,7 @@ let rec filter pred =
 
 let rec take n =
   if n < 0 then
-    fun () -> Error (Invalid_argument "take: negative value")
+    fun () -> raise (Invalid_argument "take: negative value")
   else if n = 0
   then return ()
   else fun () -> Await (fun i -> fun () -> Yield (i, take (n - 1)))
@@ -97,28 +95,24 @@ let rec drop n =
 let tail =
   fun () -> Await (fun a -> cat)
 
-let rec print =
-  map print_endline
-
-
-let rec repeat x : 'a source =
+let rec repeat x =
   fun () -> Yield (x, repeat x)
 
-let yes : string source = repeat "y"
+let yes = repeat "y"
 
-let rec count () =
+let rec infinity () =
   let rec go n =
     Yield (n, fun () -> go (n + 1)) in
   go 0
 
-let rec range start stop : int source =
-  count =>= take stop =>= drop start
+let rec range start stop =
+  infinity =>= take stop =>= drop start
 
-let rec range n m : int source =
-  count =>= take m =>= drop n
+let rec range n m =
+  infinity =>= take m =>= drop n
 
-let rec iota stop : int source =
-  count =>= take stop
+let rec iota stop =
+  infinity =>= take stop
 
 let fold f z source =
   let rec go acc source =
@@ -126,6 +120,11 @@ let fold f z source =
     | Some (a, rest) -> go (f acc a) rest
     | None           -> acc in
   go z source
+
+let rec print source =
+  match next source with
+  | Some (a, rest) -> print_endline a; print rest
+  | None -> ()
 
 let nth n source =
   if n < 0 then
@@ -149,7 +148,7 @@ let head p =
   | Some (a, _) -> Ok a
   | None -> Error (Failure "No head")
 
-let len p =
+let count p =
   let rec go total p =
     match next p with
     | Some (_, p') -> go (total + 1) p'

@@ -1,8 +1,8 @@
-Name: iter
+Name: flow
 Version: 0.1.0
 License: MIT
 Authors: Rizo Isrof <rizo@odis.io>
-Homepage: http://github.com/rizo/ocaml-iter
+Homepage: http://github.com/rizo/flow
 OASISFormat: 0.4
 BuildTools: camlp4o,ocamlbuild
 Plugins: META (0.4), DevFiles (0.4)
@@ -14,10 +14,10 @@ Description:
     This library implements the iteratees style of data processing.
     Iteratees address the problem of doing incremental, composable I/O without being lazy.
 
-Library "iter"
+Library "flow"
     Path:           src
     CompiledObject: best
-    Modules:        Iter, Elements, Flow
+    Modules:        Flow, Elements
     BuildDepends:   unix
     Install:        true
 
@@ -26,10 +26,17 @@ Executable "test_flow"
   MainIs: test_flow.ml
   CompiledObject: best
   Install: false
-  BuildDepends: iter
+  BuildDepends: flow
+
+Executable "wc"
+  Path: test
+  MainIs: wc.ml
+  CompiledObject: native
+  Install: false
+  BuildDepends: flow
 
 SourceRepository master
   Type:     git
-  Location: https://github.com/rizo/ocaml-iter.git
-  Browser:  https://github.com/rizo/ocaml-iter
+  Location: https://github.com/rizo/flow.git
+  Browser:  https://github.com/rizo/flow
 

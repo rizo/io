@@ -66,6 +66,13 @@ let rec get_char_from_chan ch =
   | Some line -> fun () -> Yield (line, get_char_from_chan ch)
   | None -> return ()
 
+let rec get_line_from_file file_path =
+  let ch = open_in file_path in
+  let rec get ch = match Exn.as_option End_of_file input_line ch with
+    | Some line -> fun () -> Yield (line, get ch)
+    | None -> print_endline "closing chan"; close_in ch; return () in
+  get ch
+
 let rec of_list xs =
   match xs with
   | x::xs' -> fun () -> Yield (x, of_list xs')
@@ -126,6 +133,9 @@ let rec print source =
   | Some (a, rest) -> print_endline a; print rest
   | None -> ()
 
+let rec inspect =
+  fun () -> Await (fun i -> print_endline i; fun () -> Yield (i, inspect))
+
 let nth n source =
   if n < 0 then
     error (Invalid_argument "nth: negative index")
@@ -142,6 +152,13 @@ let collect src =
     | Some (a, rest) -> go (a::acc) rest
     | None -> List.rev acc
   in go [] src
+
+let discard stream =
+  let rec go stream =
+    match next stream with
+    | Some (_, stream) -> go stream
+    | None -> ()
+  in go stream
 
 let head p =
   match next p with
@@ -163,6 +180,12 @@ let last p =
   loop None p
 
 let sum p = fold (+) 0 p
+
+let rec any stream =
+  match next stream with
+  | Some (a, _) when a -> a
+  | Some (a, stream) -> any stream
+  | None -> false
 
 (*
  * Divices

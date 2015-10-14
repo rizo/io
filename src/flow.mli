@@ -1,4 +1,23 @@
 
+(*
+
+## Early termination by consumers
+
+Here is an example of a sink with early termination handling.
+
+  let rec any stream =
+    match next stream with
+    | Some (a, _) when a -> a
+    | Some (a, stream) -> any stream
+    | None -> false
+
+Any requests the `next` value from the stream until it gets a truthy value,
+after this condition is satisfied the stream is suspended...
+
+
+ *)
+
+
 open Elements
 
 (* Stream represents a state of continuous computation. *)
@@ -39,7 +58,9 @@ val run : (void, void, 'b) stream -> 'b
 
 val next : 'a source -> ('a * 'a source) option
 
-val get_line_from_chan : in_channel -> ('a, string, unit) stream
+val get_line_from_chan : in_channel -> string source
+
+val get_line_from_file : string -> string source
 
 val get_char_from_chan : in_channel -> ('a, char, unit) stream
 
@@ -48,6 +69,8 @@ val of_list : 'a list -> ('b, 'a, unit) stream
 val collect : 'a source -> 'a list
 
 val count : 'a source -> int
+
+val discard : ('a, unit) sink
 
 val drop : int -> ('a, 'a) processor
 
@@ -63,7 +86,7 @@ val iota : int -> int source
 
 val last : 'a source -> 'a option
 
-val map : ('a -> 'b) -> ('a, 'b, 'c) stream
+val map : ('a -> 'b) -> ('a, 'b) processor
 
 val nth : int -> 'a source -> ('a, exn) result
 
@@ -80,4 +103,6 @@ val tail : ('a, 'a) processor
 val take : int -> ('a, 'a) processor
 
 val yes : string source
+
+val any : bool source -> bool
 

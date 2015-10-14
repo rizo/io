@@ -69,14 +69,14 @@ module Pipe = struct
 
   let length = await 0 (fun n x -> n + 1)
 
-  let rec source_list ls acc f =
+  let rec source_list ls acc k =
     match ls with
     | [] -> acc
-    | x::xs -> source_list xs (f acc x) f
+    | x::xs -> source_list xs (k acc x) k
 
-  let rec source_chan ch acc f =
+  let rec source_chan ch acc k =
     match Exn.as_option End_of_file input_line ch with
-    | Some ln -> source_chan ch (f acc ln) f
+    | Some ln -> source_chan ch (k acc ln) k
     | None -> acc
 end
 

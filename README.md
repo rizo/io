@@ -18,6 +18,15 @@ address the problem of doing incremental, composable I/O without being lazy.
 ## Examples
 
 ```ocaml
+
+(* Produces a stream of integers from `start` to `stop. *)
+let rec range start stop =
+  count => take stop => drop start
+  
+(* Applies a function to each element of a stream. *)
+let rec map f =
+  await >>= fun a -> yield (f a) >> map f
+
 (* Compute the sum of all odd integers up to 1000000. *)
 assert (iota 1000000 => filter odd => fold (+) 0 = 250000000000);
 

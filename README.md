@@ -4,7 +4,7 @@ _Work in progress_
 
 Simple, secure and composable abstraction for efficient stream processing.
 
-This library implements flow-based programming primitives for data processing. An application can be viewed as a network of asynchronous processes, called _nodes_ in this library, communicating by means of streams of structured data chunks.
+This library implements flow-based programming primitives for data processing. An application can be viewed as a network of asynchronous processes, called _nodes_, communicating by means of streams of structured data chunks.
 
 ### Features
 

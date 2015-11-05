@@ -1,12 +1,10 @@
 # Flow
 
-(_Unreleased_)
+_Work in progress_
 
-Simple, secure and composable abstraction for efficient stream processing in a purely
-functional fashion.
+Simple, secure and composable abstraction for efficient stream processing.
 
-This library implements the _iteratees_ style of data processing. Iteratees
-address the problem of doing incremental, composable I/O without being lazy.
+This library implements flow-based programming primitives for data processing. An application can be viewed as a network of asynchronous processes, called _nodes_ in this library, communicating by means of streams of structured data chunks.
 
 ### Features
 

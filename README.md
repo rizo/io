@@ -8,6 +8,13 @@ functional fashion.
 This library implements the _iteratees_ style of data processing. Iteratees
 address the problem of doing incremental, composable I/O without being lazy.
 
+### Features
+
+- Simple extandable and composable core.
+- Early termination by downstream.
+- Notification of uptream termination.
+- Prompt finalization of resources.
+
 ## Examples
 
 ```ocaml

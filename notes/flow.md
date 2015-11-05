@@ -1,5 +1,34 @@
 
 ```
+type Stream α β r =
+  | Ready r
+  | Yield (β,   Stream α β r)
+  | Await (α -> Stream α β r)
+
+```
+
+| Type Synonym        | α | β | r |
+|---------------------|:-:|:-:|:-:|
+| _**Producer** β_    |   | • |   |
+| _**Consumer** α r_  | • |   | • |
+| _**Workflow** r_    |   |   | • |
+
+
+```
+
+   Upstream | Downstream        Upstream | Downstream
+
+
+     +-------------+              +-------------+
+     |             |              |             |
+req <--           <-- req .. req <--           <-- ..
+     |    node0    |              |    node1    |
+rep -->           --> rep .. rep -->           --> ..
+     |             |              |             |
+     +-------------+              +-------------+
+
+
+
 => count
 
 Yield (0,

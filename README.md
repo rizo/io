@@ -8,10 +8,13 @@ This library implements flow-based programming primitives for data processing. A
 
 ### Features
 
-- Simple extandable and composable core.
-- Early termination by downstream.
-- Notification of uptream termination.
+- Simple and extensible core.
+- First-class composable computations.
+- Bidirectional flow of data.
+- Backend agnostic processing (sources and sinks may be data-structures, sockets, files, etc).
+- Support for various kinds of communication patterns (`pair`, `reqrep`, `pubsub`, etc).
 - Prompt finalization of resources.
+- Early termination by downstream and notification of uptream termination.
 
 ## Examples
 

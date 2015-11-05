@@ -26,7 +26,13 @@ let rec range start stop =
   
 (* Applies a function to each element of a stream. *)
 let rec map f =
-  await >>= fun a -> yield (f a) >> map f
+  forever (await >>= yield)
+
+(* Filters values of a stream using a predicate. *)
+let rec filter pred =
+  await >>= fun a ->
+    if pred a then yield a >> filter pred
+    else filter pred
 
 (* Compute the sum of all odd integers up to 1000000. *)
 assert (iota 1000000 => filter odd => fold (+) 0 = 250000000000);

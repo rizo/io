@@ -1,10 +1,26 @@
-# Flow
+# IO – A Model for Compositional Communication
 
 _Work in progress_
 
 Simple, secure and composable abstraction for efficient stream processing in a purely functional fashion.
 
 This library implements flow-based programming primitives for data processing. An application can be viewed as a network of asynchronous processes, called _nodes_, communicating by means of streams of structured data chunks.
+
+The communication between nodes is described in the following diagram:
+
+```
+   Upstream | Downstream     Upstream | Downstream
+
+
+      +-------------+        +-------------+
+      |             |        |             |
+...  <--           <--  req  <--           <--  ...
+      |    node0    |        |    node1    |
+...  -->           -->  rep  -->           -->  ...
+      |             |        |             |
+      +-------------+        +-------------+
+```
+
 
 ### Features
 

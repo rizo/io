@@ -11,7 +11,6 @@ The communication between nodes is described in the following diagram:
 ```
           Upstream       |     Downstream
 
-
       +-------------+        +-------------+
       |             |        |             |
 ...  <--           <--  req  <--           <--  ...

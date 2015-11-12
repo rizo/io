@@ -35,6 +35,8 @@ The communication between nodes is described in the following diagram:
 
 ```ocaml
 
+open IO.Seq
+
 (* Produces a stream of integers from `start` to `stop. *)
 let rec range start stop =
   count => take stop => drop start

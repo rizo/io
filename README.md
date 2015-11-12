@@ -1,4 +1,4 @@
-# IO – A Model for Compositional Communication
+# IO – Compositional Communication Model
 
 _Work in progress_
 

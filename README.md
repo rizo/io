@@ -9,7 +9,7 @@ This library implements flow-based programming primitives for data processing. A
 The communication between nodes is described in the following diagram:
 
 ```
-   Upstream | Downstream     Upstream | Downstream
+          Upstream       |     Downstream
 
 
       +-------------+        +-------------+

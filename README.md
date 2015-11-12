@@ -42,8 +42,7 @@ let rec range ?(start = 0) stop =
   count => take stop => drop start
   
 (* Applies a function to each element of a stream. *)
-let rec map f =
-  forever (await >>= yield)
+let map f = forever (await >>= yield)
 
 (* Filters values of a stream using a predicate. *)
 let rec filter pred =

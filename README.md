@@ -38,7 +38,7 @@ The communication between nodes is described in the following diagram:
 open IO.Seq
 
 (* Produces a stream of integers from `start` to `stop. *)
-let rec range start stop =
+let rec range ?(start = 0) stop =
   count => take stop => drop start
   
 (* Applies a function to each element of a stream. *)
@@ -52,7 +52,7 @@ let rec filter pred =
     else filter pred
 
 (* Compute the sum of all odd integers up to 1000000. *)
-assert (iota 1000000 => filter odd => fold (+) 0 = 250000000000);
+assert (range 1000000 => filter odd => fold (+) 0 = 250000000000);
 
 (* Take 5 integers from an infinit sequence and collect them into a list. *)
 assert (count => take 5 => collect = [1; 2; 3; 4; 5]);

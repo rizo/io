@@ -23,7 +23,7 @@ The communication between nodes is described in the following diagram:
 
 ### Features
 
-- Simple and extensible core.
+- Simple and extensible core model.
 - First-class composable computations.
 - Bidirectional flow of data.
 - Backend agnostic processing (sources and sinks may be data-structures, sockets, files, etc).

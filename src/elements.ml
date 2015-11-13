@@ -22,6 +22,19 @@ module type Functor = sig
   val map : ('a -> 'b) -> 'a t -> 'b t
 end
 
+module Result = struct
+
+  module Public = struct
+    type ('a, 'e) result =
+      | Ok    of 'a
+      | Error of 'e
+
+    let ok x = Ok x
+    let error x = Error x
+  end
+  include Public
+  type ('a, 'e) t = ('a, 'e) result
+end
 
 module Id = struct
   module Make (X : Type) = X
@@ -105,11 +118,20 @@ module type Monad = sig
 end
 
 module Exn = struct
+  open Result.Public
+
   let as_option e f x =
     try Some (f x)
     with e' when e' = e -> None
 
-  let fail msg = raise (Failure msg)
+  module Public = struct
+    let catch f x =
+      try Ok (f x)
+      with e -> Error e
+
+    let fail msg = raise (Failure msg)
+  end
+  include Public
 
   let to_string = Printexc.to_string
 end
@@ -172,19 +194,13 @@ end
 
 module Base = struct
   type void = Void
-
-  type ('a, 'e) result =
-    | Ok    of 'a
-    | Error of 'e
-
-  let ok x = Ok x
-  let error x = Error x
-
   let discard _ = ()
 
+  include Result.Public
   include Either.Public
   include Option.Public
   include Fn.Public
+  include Exn.Public
 
   (* Lazy *)
   let force = Lazy.force
@@ -209,6 +225,10 @@ module Base = struct
 
   let rec closed : void -> 'a
     = fun x -> closed x
+
+  (* Channel *)
+  let output_line chan line =
+    output_string chan (line ^ "\n")
 
 end
 

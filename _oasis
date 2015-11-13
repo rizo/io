@@ -28,6 +28,13 @@ Executable "test_flow"
   Install: false
   BuildDepends: flow
 
+Executable "sp"
+  Path: test
+  MainIs: sp.ml
+  CompiledObject: best
+  Install: false
+  BuildDepends: flow
+
 Executable "wc"
   Path: test
   MainIs: wc.ml

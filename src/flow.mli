@@ -1,18 +1,36 @@
 
 (*
 
+
+   Generator
+   Processor
+
+
+   Upstream | Downstream
+
+
+        +-------------+
+        |             |
+ a_out <--           <-- b_in
+        |    node0    |
+ a_in  -->           --> b_out
+        |             |
+        +-------------+
+
+
+
 ## Early termination by consumers
 
 Here is an example of a sink with early termination handling.
 
-  let rec any stream =
-    match next stream with
+  let rec any flow =
+    match next flow with
     | Some (a, _) when a -> a
-    | Some (a, stream) -> any stream
+    | Some (a, flow) -> any flow
     | None -> false
 
-Any requests the `next` value from the stream until it gets a truthy value,
-after this condition is satisfied the stream is suspended...
+Any requests the `next` value from the flow until it gets a truthy value,
+after this condition is satisfied the flow is suspended...
 
 
  *)
@@ -20,89 +38,88 @@ after this condition is satisfied the stream is suspended...
 
 open Elements
 
-(* Stream represents a state of continuous computation. *)
-type ('a, 'b, 'r) stream = unit -> ('a, 'b, 'r) stream_state
- and ('a, 'b, 'r) stream_state =
+(* flow represents a state of continuous computation. *)
+type ('a, 'b, 'r) flow = ('a, 'b, 'r) node Lazy.t
+ and ('a, 'b, 'r) node =
    | Ready of 'r
-   | Yield of ('b  * ('a, 'b, 'r) stream)
-   | Await of ('a -> ('a, 'b, 'r) stream)
+   | Yield of ('b  * ('a, 'b, 'r) flow)
+   | Await of ('a -> ('a, 'b, 'r) flow)
+type ('a, 'b, 'r) t = ('a, 'b, 'r) flow
 
-(* Source is a stream that can only `yield`. *)
-type 'b source = (void, 'b, unit) stream
+(* Source is a flow that can only `yield`. *)
+type ('b, 'r) source = (void, 'b, 'r) flow
 
-(* Processor applies a transformation to each element of the stream. *)
-type ('a, 'b) processor = ('a, 'b, unit) stream
+(* Processor applies a transformation to each element of the flow. *)
+type ('a, 'b) processor = ('a,   'b, void) flow
 
-(* Sink is a stream that can only `await` and `return` a result when done. *)
-type ('b, 'a) sink = 'b source -> 'a
+(* Sink is a flow that can only `await` and `return` a result when done. *)
+type ('a, 'r)      sink = ('a, void,   'r) flow
 
-val return : 'r -> ('a, 'b, 'r) stream
+val return : 'r -> ('a, 'b, 'r) flow
 
-val ( >>= ) : ('a, 'b, 'r) stream -> ('r -> ('a, 'b, 's) stream) -> ('a, 'b, 's) stream
+val ( >>= ) : ('a, 'b, 'r) flow -> ('r -> ('a, 'b, 's) flow) -> ('a, 'b, 's) flow
 
-val ( >> )  : ('a, 'b, 'r) stream -> ('a, 'b, 's) stream -> ('a, 'b, 's) stream
+val ( >> )  : ('a, 'b, 'r) flow -> ('a, 'b, 's) flow -> ('a, 'b, 's) flow
 
-val yield : 'a -> ('b, 'a, unit) stream
+val yield : 'a -> ('b, 'a, unit) flow
 
-val await : ('a, 'b, 'a) stream
+val await : ('a, 'b, 'a) flow
 
-val compose : ('a, 'b, 'r) stream -> ('d, 'a, 'r) stream -> ('d, 'b, 'r) stream
-val ( =<= ) : ('a, 'b, 'r) stream -> ('d, 'a, 'r) stream -> ('d, 'b, 'r) stream
-val ( =>= ) : ('a, 'b, 'r) stream -> ('b, 'd, 'r) stream -> ('a, 'd, 'r) stream
+val compose : ('a, 'b, 'r) flow -> ('d, 'a, 'r) flow -> ('d, 'b, 'r) flow
+val ( <= ) : ('a, 'b, 'r) flow -> ('d, 'a, 'r) flow -> ('d, 'b, 'r) flow
+val ( => ) : ('a, 'b, 'r) flow -> ('b, 'd, 'r) flow -> ('a, 'd, 'r) flow
 
-val ( => ) : 'a -> ('a -> 'b) -> 'b
+val cat : ('a, 'a, void) flow
 
-val cat : ('a, 'a, void) stream
+val run : (void, void, 'r) flow -> 'r
 
-val run : (void, void, 'b) stream -> 'b
+val next : ('a, 'r) source -> ('a * ('a, 'r) source) option
 
-val next : 'a source -> ('a * 'a source) option
+val get_line_from_chan : in_channel -> (string, 'r) source
 
-val get_line_from_chan : in_channel -> string source
+val get_line_from_file : string -> (string, 'r) source
 
-val get_line_from_file : string -> string source
+val get_char_from_chan : in_channel -> (char, 'r) source
 
-val get_char_from_chan : in_channel -> ('a, char, unit) stream
+val of_list : 'a list -> ('a, 'r) source
 
-val of_list : 'a list -> ('b, 'a, unit) stream
+val collect : ('a, 'r) source -> 'a list
 
-val collect : 'a source -> 'a list
-
-val count : 'a source -> int
+val len : ('a, 'r) source -> int
 
 val discard : ('a, unit) sink
 
 val drop : int -> ('a, 'a) processor
 
-val filter : ('a -> bool) -> ('a, 'a, 'b) stream
+val filter : ('a -> bool) -> ('a, 'a, 'b) flow
 
-val fold : ('a -> 'b -> 'a) -> 'a -> 'b source -> 'a
+val fold : ('a -> 'b -> 'a) -> 'a -> ('b, 'r) source -> 'a
 
-val head : 'a source -> ('a, exn) result
+val head : ('a, 'r) source -> ('a, exn) result
 
-val infinity : int source
+val count : (int, 'r) source
 
-val iota : int -> int source
+val iota : int -> (int, 'r) source
 
-val last : 'a source -> 'a option
+val last : ('a, 'r) source -> 'a option
 
 val map : ('a -> 'b) -> ('a, 'b) processor
 
-val nth : int -> 'a source -> ('a, exn) result
+val nth : int -> ('a, 'b, 'a option) flow
 
-val print : string source -> unit
+val put_line : (string, 'r) source -> unit
 
-val range : int -> int -> int source
+val range : int -> int -> (int, 'r) source
 
-val repeat : 'a -> 'a source
+val repeat : 'a -> ('a, 'r) source
 
-val sum : int source -> int
+val sum : (int, 'r) source -> int
 
-val tail : ('a, 'a) processor
+val tail : ('a, 'a, 'r option) flow
 
-val take : int -> ('a, 'a) processor
+val take : int -> ('a, 'a, 'r option) flow
 
-val yes : string source
+val yes : (string, 'r) source
 
-val any : bool source -> bool
+val any : (bool, 'r) source -> bool
 

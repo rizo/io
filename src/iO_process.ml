@@ -13,21 +13,27 @@ let close p =
 
 
 let proc ?(env = [||]) cmd =
+  Log.inf (fmt "Will create a process with cmd: `%s`..." cmd);
   let (stdout, stdin, stderr) =
     Unix.open_process_full cmd env in
+    Log.inf "Created.";
   try
+    Log.inf "Checking for errors...";
     let errmsg = input_line stderr in
     raise (Failure errmsg)
-  with End_of_file -> { stdin; stdout; stderr }
+  with End_of_file ->
+    Log.inf "Ok, no errors.";
+    { stdin; stdout; stderr }
 
 
 let run ?(env = [||]) cmd =
   let (stdout, stdin, stderr) =
     Unix.open_process_full cmd env in
-  try
-    let errmsg = input_line stderr in
-    Result (Error errmsg)
-  with End_of_file -> begin
+  (* try *)
+    (* let errmsg = input_line stderr in *)
+    (* Result (Error errmsg) *)
+  (* with End_of_file -> *)
+    begin
       let p = { stdin; stdout; stderr } in
       let rec loop =
         Server (function
@@ -39,6 +45,10 @@ let run ?(env = [||]) cmd =
     end
 
 
+let test () =
+  let p = proc "rev" in
+  output_line p.stdin "hello";
+  print (input_line p.stdout)
 
 
 

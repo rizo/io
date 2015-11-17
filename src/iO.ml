@@ -3,151 +3,183 @@ open Elements
 
 (*
 
-      +--------------+
-      |              |
- a2  <--            <--  b2
-      |     node0    |
- a   -->            -->  b
-      |              |
-      +-------|------+
-              v
-
-              r
+      +---------+     +---------+     +---------+
+      |         |     |         |     |         |
+ ... --> node0 --> i --> node1 --> o --> nnde2 --> ...
+      |         |     |         |     |         |
+      +----|----+     +----|----+     +----|----+
+           v               v               v
+          ...              r              ...
 *)
 
-type ('a2, 'a, 'b2, 'b, 'r) node =
-  | Request of ('a2 * ('a  -> ('a2, 'a, 'b2, 'b, 'r) node))
-  | Respond of ('b  * ('b2 -> ('a2, 'a, 'b2, 'b, 'r) node))
-  | Pure    of 'r
+(* Core Types *)
 
-let pure x = Pure x
-let return = pure
+type ('i, 'o, 'r) flow = ('i, 'o, 'r) node lazy_t
+ and ('i, 'o, 'r) node =
+  | Yield of ('o  * ('i, 'o, 'r) flow)
+  | Await of ('i -> ('i, 'o, 'r) flow)
+  | Ready of 'r
 
-let rec (>>=) n0 f =
-  let rec go n =
-    match n with
-    | Request (a', fa) -> Request (a', fun a -> go (fa a))
-    | Respond (b, fb') -> Respond (b, fun b' -> go (fb' b'))
-    | Pure r           -> f r in
-  go n0
+(* Type Synonyms *)
 
-let (>>) s1 s2 =
-  s1 >>= fun _ -> s2
+(* 'Effect's neither `await` nor `yield`. *)
+type 'r effect = (void, void, 'r) flow
 
-let request a = Request (a, pure)
-let respond a = Respond (a, pure)
+(* 'Producer's can only `yield`. *)
+type ('o, 'r) producer = (void, 'o, 'r) flow
 
-let each n0 fb =
-  let rec go n =
-    match n with
-    | Request (x', fx) -> Request (x', go @. fx)
-    | Respond (b, fb') -> fb b >>= go @. fb'
-    | Pure r           -> Pure r in
-  go n0
+(* 'Consumer's can only `await`. *)
+type ('i, 'r) consumer = ('i, void, 'r) flow
 
-let (//>) n f = each n f
-let (/>/) f g a = f a //> g
-let (~>) = (/>/)
+(* Monad *)
 
-let rev_each fb' n0 =
-  let rec go n =
-    match n with
-    | Request (b', fb) -> fb' b' >>= go @. fb
-    | Respond (x, fx') -> Respond (x, go @. fx')
-    | Pure r           -> Pure r in
-  go n0
+let return r = lazy (Ready r)
 
-(* let (>\\) f n = back f n           *)
-(* let (\>\) fb' fc' c' = fb' >\\ fc' c' *)
-(* let (>~) n1 n2 = (fun () -> n1) >\\ n2 *)
-
-(* The identity of the push category. *)
-let rec push a =
-  Respond (a, fun a' -> Request (a', push))
-
-(* Point-ful version of ('>+>') *)
-let rec (+>>) fb' n =
+let rec (>>=) (lazy n) f =
   match n with
-  | Request (b', fb) -> fb' b' >>~ fb
-  | Respond (c, fc') -> Respond (c, fun c' -> fb' +>> fc' c')
-  | Pure r           -> Pure r
+  | Yield (b, n') -> lazy (Yield (b, n' >>= f))
+  | Await k       -> lazy (Await (fun a -> k a >>= f))
+  | Ready r       -> f r
 
-(* Point-ful version of ('>~>') *)
-and (>>~) n fb =
-  match n with
-  | Request (a', fa) -> Request (a', fun a -> fa a >>~ fb)
-  | Respond (b, fb') -> fb' +>> fb b
-  | Pure r           -> Pure r
+let (>>) n1 n2 =
+  n1 >>= fun _ -> n2
 
-(* Composition operator of the push category. *)
-let (>~>) fa fb   = fun a  -> fa a >>~ fb
+(* Category *)
 
-(* The identity of the pull category. *)
-let rec pull a' =
-  Request (a', fun a -> Respond (a, pull))
+let rec id =
+  lazy (Await (fun a -> lazy (Yield (a, id))))
 
-(* Composition operator of the pull category. *)
-let (>+>) fb' fc' = fun c' -> fb'  +>> fc' c'
+let rec compose n1 n2 =
+  match force n1, force n2 with
+  | Ready r        , _              -> lazy (Ready r)
+  | Yield (b, n1') , _              -> lazy (Yield (b, compose n1' n2))
+  | Await k        , Yield (b, n2') -> compose (k b) n2'
+  | Await _        , Await k        -> lazy (Await (fun a -> compose n1 (k a)))
+  | Await _        , Ready r        -> lazy (Ready r)
 
-(* Switch the upstream and downstream ends. *)
-let rec reflect n =
-  match n with
-  | Request (a', fa) -> Respond (a', fun a -> reflect (fa a))
-  | Respond (b, fb') -> Request (b, fun b' -> reflect (fb' b'))
-  | Pure r           -> Pure r
+let (<<<) n1 n2 = compose n1 n2
+let (>>>) n2 n1 = compose n1 n2
 
-(* 'Effect's neither 'await' nor 'yield' *)
-type 'r effect = (void, unit, unit, void, 'r) node
+(* Creation *)
 
-(* 'Producer's can only 'yield' *)
-type ('b, 'r) producer = (void, unit, unit, 'b, 'r) node
+let empty   = lazy (Ready ())
+let yield b = lazy (Yield (b, empty))
+let await   = lazy (Await (fun b -> lazy (Ready b)))
 
-(* 'Pipe's can both 'await' and 'yield' *)
-type ('a, 'b, 'r) pipe = (unit, 'a, unit, 'b, 'r) node
+(* Helper Operations *)
 
-(* 'Consumer's can only 'await' *)
-type ('a, 'r) consumer = (unit, 'a, unit, void, 'r) node
+let rec run n =
+  match force n with
+  | Ready r       -> r
+  | Await k       -> run (k Void)
+  | Yield (a, n') -> run n'
 
-(* 'Client's only 'request' and never 'respond'. *)
-type ('a2, 'a, 'r) client = ('a2, 'a, unit, void, 'r) node
+let next (lazy node) =
+  match node with
+  | Ready _       -> None
+  | Yield (a, s') -> Some (a, s')
+  | Await k       -> fail "Node requires more input."
 
-(* 'Server's only 'respond' and never 'request'. *)
-type ('b2, 'b, 'r) server = (void, unit, 'b2, 'b, 'r) node
 
-let yield x = respond x
+module Seq
+  : sig
+    val count : (void, int, 'r) flow
+    val map : ('a -> 'b) -> ('a, 'b, 'r) flow
+    val filter : ('a -> bool) -> ('a, 'a, 'r) flow
+    val take : int -> ('a, 'a, unit) flow
+    val take_while : ('a -> bool) -> ('a, 'a, unit) flow
+    val drop : int -> ('a, 'a, 'b) flow
+    val drop_while : ('a -> bool) -> ('a, 'a, 'b) flow
+    val tail : ('a, 'a, 'b) node
+    val repeat : 'a -> ('b, 'a, 'c) flow
+    val iota : int -> (void, int, unit) flow
+    val range : int -> int -> (void, int, unit) flow
+    val fold : init:'a -> f:('a -> 'b -> 'a) -> ('c, 'b, 'd) flow -> 'a
+    val list : 'a list -> (void, 'a, unit) flow
+    val file : string -> (void, string, unit) flow
+    val collect : ('a, 'b, 'c) flow -> 'b list
+  end
 
-let await   = Request ((), pure)
+= struct
 
-(* let cat = pull () *)
-let rec cat =
-  Request ((), fun a -> Respond (a, pull))
+  let rec count =
+    let rec loop n =
+      lazy (Yield (n, loop (n + 1))) in
+    loop 0
 
-let (>->) n1 n2 = (fun () -> n1) +>> n2
+  let rec map f =
+    lazy (Await (fun a -> lazy (Yield (f a, map f))))
 
-module Seq = struct
-  let seq f = each cat f
+  let rec filter pred =
+    lazy (Await (fun a ->
+        if pred a then lazy (Yield (a, filter pred))
+        else filter pred))
 
-  let list xs = List.foldr xs ~f:(fun a n -> yield a >> n) ~init:(return ())
-
-  let iter f = seq (fun a -> f a; return ())
-  let map  f = seq (fun a -> yield (f a))
-
-  let filter pred =
-    seq (fun a -> if pred a then yield a else return ())
+  let rec take n =
+    if n < 0 then raise (Invalid_argument "take: negative index")
+    else lazy (if n = 0 then Ready ()
+               else Await (fun i -> lazy (Yield (i, take (n - 1)))))
 
   let rec take_while pred =
-    await >>= fun a ->
-    if pred a then yield a >> take_while pred
-    else return ()
+    lazy (Await (fun a ->
+        lazy (if pred a then Yield (a, take_while pred)
+              else Ready ())))
 
-  let concat () = seq list
+  let rec drop n =
+    if n = 0 then id
+    else lazy (Await (fun a -> drop (n - 1)))
 
-  let fold ~f ~init ?(stop = Fn.id) source =
-    let rec loop n x =
-      match n with
-      | Request (v, _)  -> closed v
-      | Respond (a, fu) -> loop (fu ()) (f x a)
-      | Pure    _       -> return (stop x) in
+  let rec drop_while pred =
+    lazy (Await (fun a ->
+        if pred a then drop_while pred
+        else id))
+
+  let tail = Await (fun _ -> id)
+
+  let rec repeat x = lazy (Yield (x, repeat x))
+
+  let rec iota stop =
+    count >>> take stop
+
+  let rec range start stop =
+    count >>> take stop >>> drop start
+
+  let fold ~init ~f source =
+    let rec loop source acc =
+      match next source with
+      | Some (a, rest) -> loop rest (f acc a)
+      | None           -> acc in
     loop source init
+
+  let rec list xs =
+    lazy begin match xs with
+      | x::xs' -> Yield (x, list xs')
+      | []     -> Ready ()
+    end
+
+  let rec file file_path =
+    let c = open_in file_path in
+    let rec loop () =
+      lazy (Yield (input_line c, loop ())) in
+    try loop ()
+    with End_of_file -> empty
+
+  let collect src =
+    let rec loop src acc =
+      match next src with
+      | Some (a, rest) -> loop rest (a::acc)
+      | None -> List.rev acc
+    in loop src []
+
+end
+
+
+module Test = struct
+  open Seq
+
+  let general () =
+    let result = fold ~f:(+) ~init:0
+        (iota 100000 >>> map ((+) 100) >>> take_while ((>) 108)) in
+    assert (result = 828)
 end
 

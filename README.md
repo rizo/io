@@ -8,9 +8,9 @@ This library implements flow-based programming primitives for data processing. A
 
 Each node can be in three different states:
 
-- **`Yield (o  * next)`** – producing values for downstream.
-- **`Await (i -> next)`** – awaiting for values from upstream.
-- **`Ready r`** - returning a final result of computation.
+- **Yield** – producing values for downstream.
+- **Await** – awaiting for values from upstream.
+- **Ready** - returning a final result of computation.
 
 The communication between nodes is described in the following diagram:
 

@@ -18,7 +18,7 @@ The communication between nodes is described in the following diagram:
 
       +---------+       +---------+       +---------+
       |         |       |         |       |         |
- ... --> node0 -->  i  --> node1 -->  o  --> nnde2 --> ...
+ ... --> node0 -->  i  --> node1 -->  o  --> node2 --> ...
       |         |       |         |       |         |
       +----|----+       +----|----+       +----|----+
            v                 v                 v

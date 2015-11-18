@@ -6,6 +6,12 @@ Simple, secure and composable abstraction for efficient stream processing in a p
 
 This library implements flow-based programming primitives for data processing. An application can be viewed as a network of asynchronous processes, called _nodes_, communicating by means of streams of structured data chunks.
 
+Each node can be in three different states:
+
+- **`Yield (o  * next)`** – producing values for downstream.
+- **`Await (i -> next)`** – awaiting for values from upstream.
+- **`Ready r`** - returning a final result of computation.
+
 The communication between nodes is described in the following diagram:
 
 ```

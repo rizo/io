@@ -1,5 +1,5 @@
-Name: flow
-Version: 0.1.0
+Name: io
+Version: 0.2.0
 License: MIT
 Authors: Rizo Isrof <rizo@odis.io>
 Homepage: http://github.com/rizo/flow
@@ -8,39 +8,26 @@ BuildTools: camlp4o,ocamlbuild
 Plugins: META (0.4), DevFiles (0.4)
 
 Synopsis:
-    Simple, secure and composable abstraction for efficient stream
-    processing in a purely functional fashion.
+    Simple, secure and composable abstraction for efficient component
+    communcation.
 Description:
-    This library implements the iteratees style of data processing.
-    Iteratees address the problem of doing incremental, composable I/O without being lazy.
+  This library implements flow-based programming primitives for data processing.
+  An application can be viewed as a network of asynchronous processes, called
+  nodes, communicating by means of streams of structured data chunks.
 
-Library "flow"
+Library "io"
     Path:           src
     CompiledObject: best
-    Modules:        Flow, Elements
+    Modules:        IO, Elements
     BuildDepends:   unix
     Install:        true
 
-Executable "test_flow"
+Executable "test_io"
   Path: test
-  MainIs: test_flow.ml
+  MainIs: test_io.ml
   CompiledObject: best
   Install: false
-  BuildDepends: flow
-
-Executable "sp"
-  Path: test
-  MainIs: sp.ml
-  CompiledObject: best
-  Install: false
-  BuildDepends: flow
-
-Executable "wc"
-  Path: test
-  MainIs: wc.ml
-  CompiledObject: native
-  Install: false
-  BuildDepends: flow
+  BuildDepends: io
 
 SourceRepository master
   Type:     git

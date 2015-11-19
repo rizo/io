@@ -174,9 +174,6 @@ module List = struct
   let iter l ~f =
     StdLabels.List.iter ~f l
 
-  let iteri l ~f =
-    StdLabels.List.iteri ~f l
-
   let filter_map l ~f =
     let res = fold l ~init:[] ~f:(fun acc e -> f e::acc) in
     fold res ~init:[] ~f:(fun acc -> function

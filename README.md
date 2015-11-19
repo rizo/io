@@ -1,6 +1,8 @@
 # IO – Compositional Communication Model
 
+<!--
 [![Build Status](https://travis-ci.org/rizo/io.svg?branch=master)](https://travis-ci.org/rizo/io?branch=master)
+-->
 
 - Development relese: [`0.2.0`](https://github.com/rizo/io/tree/0.2.0)
 

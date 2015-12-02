@@ -16,15 +16,29 @@ Description:
   nodes, communicating by means of streams of structured data chunks.
 
 Library "io"
-    Path:           src
-    CompiledObject: best
-    Modules:        IO, Elements
-    BuildDepends:   unix
-    Install:        true
+  Path:           src
+  CompiledObject: best
+  Modules:        IO, IO_core, IO_iter, IO_proc
+  BuildDepends:   unix, elements
+  Install:        true
 
-Executable "test_io"
-  Path: test
-  MainIs: test_io.ml
+Executable "test_io_core"
+  Path: tests
+  MainIs: test_io_core.ml
+  CompiledObject: best
+  Install: false
+  BuildDepends: io
+
+Executable "test_io_iter"
+  Path: tests
+  MainIs: test_io_iter.ml
+  CompiledObject: best
+  Install: false
+  BuildDepends: io
+
+Executable "test_io_proc"
+  Path: tests
+  MainIs: test_io_proc.ml
   CompiledObject: best
   Install: false
   BuildDepends: io

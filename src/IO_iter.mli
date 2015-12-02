@@ -5,6 +5,7 @@ open IO_core
 val ( <= ) : ('b, 'c, 'r) node -> ('a, 'b, 'r) node -> ('a, 'c, 'r) node
 val ( => ) : ('a, 'b, 'r) node -> ('b, 'c, 'r) node -> ('a, 'c, 'r) node
 val any : (void, bool, 'r) node -> bool
+val chan : in_channel -> ('a, bytes, unit) node
 val collect : ('a, 'b, 'c) node -> 'b list
 val count : (void, int, 'r) node
 val drop : int -> ('a, 'a, 'b) node

@@ -117,6 +117,12 @@ let rec file file_path =
   let rec loop () =
     yield (input_line c) >> lazy (loop ()) in
   try loop ()
+  with End_of_file -> close_in c; return ()
+
+let rec chan chan =
+  let rec loop () =
+    yield (input_line chan) >> lazy (loop ()) in
+  try loop ()
   with End_of_file -> return ()
 
 let collect src =
@@ -125,19 +131,4 @@ let collect src =
     | Some (a, rest) -> loop rest (a::acc)
     | None -> List.rev acc
   in loop src []
-
-(* Experiments with Finalizers *)
-
-let scope close node =
-  node
-
-let file path =
-  let chan = open_in path in
-  let rec loop chan =
-    yield (input_line chan) >> lazy (loop chan) in
-  try
-    scope (fun () -> close_in chan) (loop chan)
-  with End_of_file ->
-    close_in chan;
-    return ()
 

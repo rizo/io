@@ -11,20 +11,20 @@ type proc = {
 exception Process_cretion_failure of string
 
 let proc ?(env = [||]) cmd =
-  Log.inf (fmt "Will create a process with cmd: `%s`..." cmd);
+  Log.info (fmt "Will create a process with cmd: `%s`..." cmd);
   let (stdout, stdin, stderr) =
     Unix.open_process_full cmd env in
-    Log.inf "Created.";
+    Log.info "Created.";
   try
-    Log.inf "Checking for errors...";
+    Log.info "Checking for errors...";
     Unix.set_nonblock (Unix.descr_of_in_channel stderr);
     Unix.sleep 1;
     let err_msg = input_line stderr in
-    Log.inf "An error occured...";
+    Log.info "An error occured...";
     Unix.clear_nonblock (Unix.descr_of_in_channel stderr);
     raise (Process_cretion_failure err_msg)
   with End_of_file | Sys_blocked_io ->
-    Log.inf "Ok, no errors.";
+    Log.info "Ok, no errors.";
     { stdin; stdout; stderr }
 
 let close p =

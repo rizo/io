@@ -10,6 +10,7 @@ val collect : ('a, 'b, 'c) node -> 'b list
 val count : (void, int, 'r) node
 val drop : int -> ('a, 'a, 'b) node
 val drop_while : ('a -> bool) -> ('a, 'a, 'b) node
+val each : ('a -> unit) -> ('a, void, 'r) node
 val file : string -> (void, string, unit) node
 val filter : ('a -> bool) -> ('a, 'a, 'r) node
 val fold : init:'a -> f:('a -> 'b -> 'a) -> ('c, 'b, 'd) node -> 'a

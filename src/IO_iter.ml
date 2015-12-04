@@ -21,6 +21,9 @@ let map_forever f =
 
 let map = map_forever
 
+let rec each f =
+  await >>= fun a -> f a; each f
+
 let rec filter pred =
   await >>= fun a ->
   if pred a then yield a >> lazy (filter pred)
@@ -112,18 +115,16 @@ let rec list xs =
   | x::xs' -> yield x >> lazy (list xs')
   | []     -> return ()
 
+let rec chan c =
+  let rec loop () =
+    match guard input_line c with
+    | Some line -> yield line >> lazy (loop ())
+    | None -> return () in
+  loop ()
+
 let rec file file_path =
   let c = open_in file_path in
-  let rec loop () =
-    yield (input_line c) >> lazy (loop ()) in
-  try loop ()
-  with End_of_file -> close_in c; return ()
-
-let rec chan chan =
-  let rec loop () =
-    yield (input_line chan) >> lazy (loop ()) in
-  try loop ()
-  with End_of_file -> return ()
+  chan c >> lazy (return (close_in c))
 
 let collect src =
   let rec loop src acc =
@@ -131,4 +132,3 @@ let collect src =
     | Some (a, rest) -> loop rest (a::acc)
     | None -> List.rev acc
   in loop src []
-

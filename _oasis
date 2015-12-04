@@ -43,6 +43,14 @@ Executable "test_io_proc"
   Install: false
   BuildDepends: io
 
+
+Executable "bench_chan"
+  Path: bench
+  MainIs: bench_chan.ml
+  CompiledObject: best
+  Install: false
+  BuildDepends: elements, io
+
 SourceRepository master
   Type:     git
   Location: https://github.com/rizo/flow.git

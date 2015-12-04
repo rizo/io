@@ -5,7 +5,7 @@ open IO.Iter
 
 let test_sinks () = begin
   print_endline "io_iter: test_sinks";
-  assert (len (iota 10) = 10);
+  assert (length (iota 10) = 10);
   assert (sum (iota 10) = 45);
   assert (last (range 20 26) = Some 25);
 end
@@ -23,7 +23,7 @@ let test_api () = begin
 
   assert (fold ~init:0 ~f:(+) (iota 1000000 => filter odd) = 250000000000);
   assert (collect (count => take 5) = [0; 1; 2; 3; 4]);
-  assert (len (list (List.range 10 100) => take 10 => tail) = 9);
+  assert (length (list (List.range 10 100) => take 10 => tail) = 9);
   assert (sum (list (List.range 10 100) => take 10 => filter even) = 70);
   assert (fold ~init:0 ~f:(+) (list (List.range 50 100) => take 10) = 545);
   assert (head (range 10 100) = Some 10);

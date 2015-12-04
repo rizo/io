@@ -16,7 +16,7 @@ val fold : init:'a -> f:('a -> 'b -> 'a) -> ('c, 'b, 'd) node -> 'a
 val head : (void, 'b, 'r) node -> 'b option
 val iota : int -> (void, int, unit) node
 val last : (void, 'b, 'r) node -> 'b option
-val len : (void, int, 'r) node -> int
+val length : (void, 'b, 'r) node -> int
 val list : 'a list -> (void, 'a, unit) node
 val map : ('a -> 'b) -> ('a, 'b, 'r) node
 val nth : int -> ('a, 'b, 'r) node -> 'b option

@@ -92,7 +92,7 @@ let head p =
   | None        -> None
 
 let sum source = fold ~init:0 ~f:(+) source
-let len source = fold ~init:0 ~f:(fun c i -> c + 1) source
+let length source = fold ~init:0 ~f:(fun c _ -> c + 1) source
 
 let rec any source =
   match next source with

@@ -24,10 +24,16 @@ let map = map_forever
 let rec each f =
   await >>= fun a -> f a; each f
 
-let rec filter pred =
+let rec filter f =
   await >>= fun a ->
-  if pred a then yield a >> lazy (filter pred)
-  else filter pred
+  if f a then yield a >> lazy (filter f)
+  else filter f
+
+let rec filter_map f =
+  await >>= fun a ->
+  match f a with
+  | Some a' -> yield a' >> lazy (filter_map f)
+  | None    -> filter_map f
 
 let rec take_rec n =
   if n < 0 then raise (Invalid_argument "take: negative index")

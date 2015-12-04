@@ -13,6 +13,7 @@ val drop_while : ('a -> bool) -> ('a, 'a, 'b) node
 val each : ('a -> unit) -> ('a, void, 'r) node
 val file : string -> (void, string, unit) node
 val filter : ('a -> bool) -> ('a, 'a, 'r) node
+val filter_map : ('a -> 'b option) -> ('a, 'b, 'r) node
 val fold : init:'a -> f:('a -> 'b -> 'a) -> ('c, 'b, 'd) node -> 'a
 val head : (void, 'b, 'r) node -> 'b option
 val iota : int -> (void, int, unit) node

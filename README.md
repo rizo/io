@@ -1,4 +1,4 @@
-# IO – Compositional Communication Model
+# Modular I/O for Computation Workflows
 
 <!--
 [![Build Status](https://travis-ci.org/rizo/io.svg?branch=master)](https://travis-ci.org/rizo/io?branch=master)

@@ -67,13 +67,13 @@ let rec repeat ?n x =
   | None -> forever (yield x)
 
 let rec iota stop =
-  count >>> take stop
+  count => take stop
 
 let range start stop =
-  count >>> take stop >>> drop start
+  count => take stop => drop start
 
 let slice i j =
-  drop i >>> take (j - i)
+  drop i => take (j - i)
 
 let fold ~init ~f source =
   let rec loop source acc =

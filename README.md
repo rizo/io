@@ -7,7 +7,7 @@
 - Development relese: [`0.2.0`](https://github.com/rizo/io/tree/0.2.0)
 
 
-This library implements flow-based programming primitives for stream processing in a purely functional fashion. An application can be viewed as a network of asynchronous processes, called _nodes_, communicating by means of streams of structured data chunks.
+This library implements flow-based programming primitives for stream processing in a purely functional fashion. An application can be viewed as a network of asynchronous processes, called _nodes_, communicating by means of streams of typed data chunks.
 
 Each node can be in three different states:
 

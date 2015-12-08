@@ -1,4 +1,4 @@
-# IO – Compositional Communication Model
+# Modular I/O for Computation Workflows
 
 <!--
 [![Build Status](https://travis-ci.org/rizo/io.svg?branch=master)](https://travis-ci.org/rizo/io?branch=master)
@@ -6,9 +6,8 @@
 
 - Development relese: [`0.2.0`](https://github.com/rizo/io/tree/0.2.0)
 
-Simple, secure and composable abstraction for efficient stream processing in a purely functional fashion.
 
-This library implements flow-based programming primitives for data processing. An application can be viewed as a network of asynchronous processes, called _nodes_, communicating by means of streams of structured data chunks.
+This library implements flow-based programming primitives for stream processing in a purely functional fashion. An application can be viewed as a network of asynchronous processes, called _nodes_, communicating by means of streams of typed data chunks.
 
 Each node can be in three different states:
 

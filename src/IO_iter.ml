@@ -21,6 +21,7 @@ let map_forever f =
 
 let map = map_forever
 
+(* TODO: Use next. *)
 let rec each f =
   await >>= fun a -> f a; each f
 
@@ -138,3 +139,18 @@ let collect src =
     | Some (a, rest) -> loop rest (a::acc)
     | None -> List.rev acc
   in loop src []
+
+module Explicit = struct
+
+  let rec map f s =
+    await_from s >>= fun a -> yield (f a) >> lazy (map f s)
+
+  let take n s =
+    replicate n (await_from s >>= yield)
+
+  let rec filter f s =
+    await_from s >>= fun a ->
+    if f a then yield a >> lazy (filter f s)
+    else filter f s
+
+end

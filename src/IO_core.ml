@@ -7,7 +7,7 @@ let (!) = Lazy.(!)
 
       +---------+       +---------+       +---------+
       |         |       |         |       |         |
- ... --> node0 -->  i  --> node1 -->  o  --> nnde2 --> ...
+ ... --> node0 -->  i  --> node1 -->  o  --> node2 --> ...
       |         |       |         |       |         |
       +----|----+       +----|----+       +----|----+
            v                 v                 v
@@ -16,23 +16,21 @@ let (!) = Lazy.(!)
 
 (* Core Types *)
 
-type stop = unit -> unit
-
-type ('i, 'o, 'r) node =
-  | Yield of ('o  * ('i, 'o, 'r) node lazy_t)
-  | Await of ('i -> ('i, 'o, 'r) node)
+type ('i, 'o, 'r) stream =
+  | Yield of ('o  * ('i, 'o, 'r) stream lazy_t)
+  | Await of ('i -> ('i, 'o, 'r) stream)
   | Ready of 'r
 
 (* Type Synonyms *)
 
 (* 'Effect's neither `await` nor `yield`. *)
-type 'r effect = (void, void, 'r) node
+type 'r effect = (void, void, 'r) stream
 
 (* 'Producer's can only `yield`. *)
-type ('o, 'r) producer = (void, 'o, 'r) node
+type ('o, 'r) producer = (void, 'o, 'r) stream
 
 (* 'Consumer's can only `await`. *)
-type ('i, 'r) consumer = ('i, void, 'r) node
+type ('i, 'r) consumer = ('i, void, 'r) stream
 
 (* Monad & Monadic Combinators *)
 
@@ -85,15 +83,18 @@ let (>>>) n2 n1 = compose n1 n2
 
 (* Helper Operations *)
 
+let await_from stream =
+  stream >>> Await (fun b -> Ready b)
+
 let rec run n =
   match n with
   | Ready r            -> Some r
   | Await k            -> None
   | Yield (a, lazy n') -> run n'
 
-let next node =
-  match node with
+let next stream =
+  match stream with
   | Ready _            -> None
   | Yield (a, lazy s') -> Some (a, s')
-  | Await k            -> fail "Node requires more input."
+  | Await k            -> fail "stream requires more input."
 

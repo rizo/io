@@ -34,10 +34,12 @@ The communication between nodes is described in the following diagram:
 
 - Simple and extensible core model.
 - First-class composable computations.
-- Backend agnostic processing (sources and sinks may be data-structures, sockets, files, etc).
-- Support for various kinds of communication patterns (`pair`, `reqrep`, `pubsub`, etc).
+- Context independent processing (sources and sinks may be data-structures, sockets, files, etc.).
+- Support for various kinds of communication patterns (`pair`, `reqrep`, `pubsub`, etc.).
 - Prompt finalization of resources.
-- Early termination by downstream and notification of uptream termination.
+- Early termination consumers and notification of upstream termination.
+
+This model permits a context independent creation of data transformations that may later be adapted and applied to concrete sources and sinks.
 
 ## Examples
 
@@ -48,7 +50,7 @@ open IO.Seq
 (* Produces a stream of integers from `start` to `stop. *)
 let rec range start stop =
   count => take stop => drop start
-  
+
 (* Applies a function to each element of a stream. *)
 let map f = forever (await >>= fun a -> yield (f a))
 

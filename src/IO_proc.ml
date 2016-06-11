@@ -20,7 +20,7 @@ let proc ?(env = [||]) cmd =
     Unix.set_nonblock (Unix.descr_of_in_channel stderr);
     Unix.sleep 1;
     let err_msg = input_line stderr in
-    Log.info "An error occured...";
+    Log.info "An error occurred...";
     Unix.clear_nonblock (Unix.descr_of_in_channel stderr);
     raise (Process_cretion_failure err_msg)
   with End_of_file | Sys_blocked_io ->

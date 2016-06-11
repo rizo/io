@@ -64,7 +64,7 @@ let rec filter pred =
 (* Compute the sum of all odd integers up to 1000000. *)
 assert (fold ~init:0 ~f:(+) (iota 1000000 => filter odd) = 250000000000);
 
-(* Take 5 integers from an infinit sequence and collect them into a list. *)
+(* Take 5 integers from an infinite sequence and collect them into a list. *)
 assert (collect (count => take 5) = [0; 1; 2; 3; 4]);
 
 ```
